@@ -348,7 +348,7 @@ npm run demo
 
 ### 3. DOM 局部更新
 
-内置 `IncrementalDomRenderer` 只替换受影响的 `[data-incremark-block]` 节点，未变更块保持原样挂载。
+内置 `IncrementalDomRenderer` 会优先在 DOM 结构不变时做文本和属性的原地更新；只有结构变化时，才会替换受影响的 `[data-incremark-block]` 节点。
 
 ## 扩展点
 

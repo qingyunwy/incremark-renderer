@@ -110,6 +110,7 @@ declare class IncrementalDomRenderer {
     private createBlockElement;
     private getBlockNode;
     private getBlockChildren;
+    private trySyncBlockInPlace;
 }
 
 declare function renderMarkdown(markdown: string, options?: StreamMarkdownOptions): FullRenderResult;

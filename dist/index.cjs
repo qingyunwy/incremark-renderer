@@ -658,6 +658,48 @@ var StreamMarkdownRenderer = class {
 };
 
 // src/dom-renderer.ts
+function syncAttributes(current, next) {
+  for (const attribute of Array.from(current.attributes)) {
+    if (!next.hasAttribute(attribute.name)) {
+      current.removeAttribute(attribute.name);
+    }
+  }
+  for (const attribute of Array.from(next.attributes)) {
+    if (current.getAttribute(attribute.name) !== attribute.value) {
+      current.setAttribute(attribute.name, attribute.value);
+    }
+  }
+}
+function collectInPlaceSync(current, next, attributePairs, textPatches) {
+  if (current.nodeType !== next.nodeType) {
+    return false;
+  }
+  if (current.nodeType === Node.TEXT_NODE && next.nodeType === Node.TEXT_NODE) {
+    textPatches.push({
+      current,
+      nextValue: next.textContent ?? ""
+    });
+    return true;
+  }
+  if (!(current instanceof Element) || !(next instanceof Element)) {
+    return false;
+  }
+  if (current.tagName !== next.tagName || current.childNodes.length !== next.childNodes.length) {
+    return false;
+  }
+  attributePairs.push({ current, next });
+  for (let index = 0; index < current.childNodes.length; index += 1) {
+    if (!collectInPlaceSync(
+      current.childNodes[index],
+      next.childNodes[index],
+      attributePairs,
+      textPatches
+    )) {
+      return false;
+    }
+  }
+  return true;
+}
 var IncrementalDomRenderer = class {
   engine;
   root;
@@ -709,7 +751,12 @@ var IncrementalDomRenderer = class {
       }
       if (patch.type === "replace") {
         const existing = patch.previousBlock ? this.getBlockNode(patch.previousBlock.key) : this.getBlockNode(patch.key);
-        existing?.replaceWith(node);
+        if (!existing) {
+          continue;
+        }
+        if (!this.trySyncBlockInPlace(existing, node)) {
+          existing.replaceWith(node);
+        }
       }
     }
   }
@@ -725,6 +772,22 @@ var IncrementalDomRenderer = class {
     return Array.from(this.root.children).filter(
       (child) => child instanceof HTMLElement && child.hasAttribute("data-incremark-block")
     );
+  }
+  trySyncBlockInPlace(existing, next) {
+    const attributePairs = [];
+    const textPatches = [];
+    if (!collectInPlaceSync(existing, next, attributePairs, textPatches)) {
+      return false;
+    }
+    for (const pair of attributePairs) {
+      syncAttributes(pair.current, pair.next);
+    }
+    for (const patch of textPatches) {
+      if (patch.current.data !== patch.nextValue) {
+        patch.current.data = patch.nextValue;
+      }
+    }
+    return true;
   }
 };
 
@@ -755,7 +818,43 @@ function getCursorLineHeight(element) {
   const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
   return Number.isFinite(fontSize) ? fontSize * 1.4 : 24;
 }
-function findCaretRect(root) {
+function getCursorFontSize(element) {
+  const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
+  return Number.isFinite(fontSize) ? fontSize : 16;
+}
+function needsMarkerMeasurement(node) {
+  if (node.nodeType !== Node.TEXT_NODE) {
+    return true;
+  }
+  const text = node.textContent ?? "";
+  return text.endsWith("\n");
+}
+function measureRangeWithMarker(range) {
+  const marker = document.createElement("span");
+  marker.setAttribute("aria-hidden", "true");
+  marker.textContent = "\u200B";
+  marker.style.display = "inline-block";
+  marker.style.width = "0";
+  marker.style.height = "1em";
+  marker.style.overflow = "hidden";
+  marker.style.opacity = "0";
+  marker.style.pointerEvents = "none";
+  marker.style.userSelect = "none";
+  marker.style.verticalAlign = "baseline";
+  range.insertNode(marker);
+  const normalizeTarget = marker.parentNode;
+  const rect = marker.getBoundingClientRect();
+  marker.remove();
+  normalizeTarget?.normalize();
+  return rect.width || rect.height ? rect : null;
+}
+function getCaretContextElement(lastNode, lastBlock) {
+  if (lastNode instanceof Text) {
+    return lastNode.parentElement ?? lastBlock;
+  }
+  return lastNode instanceof HTMLElement ? lastNode : lastBlock;
+}
+function findCaretMetrics(root) {
   const lastBlock = getLastBlock(root);
   if (!lastBlock) {
     return null;
@@ -784,6 +883,8 @@ function findCaretRect(root) {
   if (!lastNode) {
     return null;
   }
+  const lineHeight = getCursorLineHeight(getCaretContextElement(lastNode, lastBlock));
+  const fontSize = getCursorFontSize(getCaretContextElement(lastNode, lastBlock));
   const range = document.createRange();
   if (lastNode.nodeType === Node.TEXT_NODE) {
     const text = lastNode.textContent ?? "";
@@ -795,7 +896,11 @@ function findCaretRect(root) {
   }
   const rects = range.getClientRects();
   const lastRect = rects.length > 0 ? rects.item(rects.length - 1) : null;
-  return lastRect ?? lastBlock.getBoundingClientRect();
+  if (lastRect && !needsMarkerMeasurement(lastNode)) {
+    return { rect: lastRect, lineHeight, fontSize };
+  }
+  const rect = measureRangeWithMarker(range) ?? lastRect ?? lastBlock.getBoundingClientRect();
+  return { rect, lineHeight, fontSize };
 }
 var TypewriterCursorController = class {
   root;
@@ -834,15 +939,16 @@ var TypewriterCursorController = class {
       cancelAnimationFrame(this.frame);
     }
     this.frame = requestAnimationFrame(() => {
-      const rect = findCaretRect(this.root);
-      const lastBlock = getLastBlock(this.root);
+      const metrics = findCaretMetrics(this.root);
       const rootRect = this.root.getBoundingClientRect();
-      const lineHeight = lastBlock ? getCursorLineHeight(lastBlock) : 24;
-      const top = rect ? rect.bottom - rootRect.top + this.root.scrollTop - lineHeight : this.root.scrollTop + 8;
+      const rect = metrics?.rect ?? null;
+      const lineHeight = metrics?.lineHeight ?? 24;
+      const fontSize = metrics?.fontSize ?? 16;
+      const rectHeight = rect?.height ?? fontSize;
+      const height = Math.max(18, Math.min(lineHeight, Math.max(fontSize, rectHeight * 0.92)));
+      const top = rect ? rect.top - rootRect.top + this.root.scrollTop + (rectHeight - height) / 2 : this.root.scrollTop + 8 + Math.max(0, (lineHeight - height) / 2);
       const left = rect ? rect.right - rootRect.left + this.root.scrollLeft + 2 : this.root.scrollLeft + 8;
-      const height = Math.max(18, Math.min(lineHeight, rect?.height ?? lineHeight));
-      this.cursor.style.top = `${top}px`;
-      this.cursor.style.left = `${left}px`;
+      this.cursor.style.transform = `translate3d(${left}px, ${top}px, 0)`;
       this.cursor.style.height = `${height}px`;
       if (this.autoScroll) {
         const cursorBottom = top + height;

@@ -2,6 +2,74 @@ import { wrapBlockHtml } from './renderers.js';
 import type { RenderPatch, StableBlock, StreamMarkdownOptions } from './types.js';
 import { StreamMarkdownRenderer } from './stream-markdown.js';
 
+interface AttributeSyncPair {
+  current: Element;
+  next: Element;
+}
+
+interface TextSyncPatch {
+  current: Text;
+  nextValue: string;
+}
+
+function syncAttributes(current: Element, next: Element): void {
+  for (const attribute of Array.from(current.attributes)) {
+    if (!next.hasAttribute(attribute.name)) {
+      current.removeAttribute(attribute.name);
+    }
+  }
+
+  for (const attribute of Array.from(next.attributes)) {
+    if (current.getAttribute(attribute.name) !== attribute.value) {
+      current.setAttribute(attribute.name, attribute.value);
+    }
+  }
+}
+
+function collectInPlaceSync(
+  current: Node,
+  next: Node,
+  attributePairs: AttributeSyncPair[],
+  textPatches: TextSyncPatch[],
+): boolean {
+  if (current.nodeType !== next.nodeType) {
+    return false;
+  }
+
+  if (current.nodeType === Node.TEXT_NODE && next.nodeType === Node.TEXT_NODE) {
+    textPatches.push({
+      current: current as Text,
+      nextValue: next.textContent ?? '',
+    });
+    return true;
+  }
+
+  if (!(current instanceof Element) || !(next instanceof Element)) {
+    return false;
+  }
+
+  if (current.tagName !== next.tagName || current.childNodes.length !== next.childNodes.length) {
+    return false;
+  }
+
+  attributePairs.push({ current, next });
+
+  for (let index = 0; index < current.childNodes.length; index += 1) {
+    if (
+      !collectInPlaceSync(
+        current.childNodes[index] as Node,
+        next.childNodes[index] as Node,
+        attributePairs,
+        textPatches,
+      )
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export class IncrementalDomRenderer {
   private readonly engine: StreamMarkdownRenderer;
   private readonly root: HTMLElement;
@@ -67,7 +135,13 @@ export class IncrementalDomRenderer {
         const existing = patch.previousBlock
           ? this.getBlockNode(patch.previousBlock.key)
           : this.getBlockNode(patch.key);
-        existing?.replaceWith(node);
+        if (!existing) {
+          continue;
+        }
+
+        if (!this.trySyncBlockInPlace(existing, node)) {
+          existing.replaceWith(node);
+        }
       }
     }
   }
@@ -89,5 +163,26 @@ export class IncrementalDomRenderer {
       (child): child is HTMLElement =>
         child instanceof HTMLElement && child.hasAttribute('data-incremark-block'),
     );
+  }
+
+  private trySyncBlockInPlace(existing: HTMLElement, next: HTMLElement): boolean {
+    const attributePairs: AttributeSyncPair[] = [];
+    const textPatches: TextSyncPatch[] = [];
+
+    if (!collectInPlaceSync(existing, next, attributePairs, textPatches)) {
+      return false;
+    }
+
+    for (const pair of attributePairs) {
+      syncAttributes(pair.current, pair.next);
+    }
+
+    for (const patch of textPatches) {
+      if (patch.current.data !== patch.nextValue) {
+        patch.current.data = patch.nextValue;
+      }
+    }
+
+    return true;
   }
 }

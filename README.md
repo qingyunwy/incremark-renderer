@@ -313,7 +313,7 @@ Each block stores the `marked` token tree and a structural digest. On each updat
 - `replace` for changed AST subtrees
 - `remove` for blocks that disappear after finalization or reset flows
 
-The built-in DOM renderer applies those patches to `[data-incremark-block]` wrappers so unchanged blocks remain mounted.
+The built-in DOM renderer applies those patches to `[data-incremark-block]` wrappers and, when the DOM shape stays the same, updates text and attributes in place before falling back to full block replacement.
 
 ## Extensibility
 
