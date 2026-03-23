@@ -1,0 +1,49 @@
+{
+  "name": "incremark-renderer",
+  "version": "0.1.0",
+  "description": "Streaming Markdown renderer with incremental lexing, AST diffing, and partial DOM updates powered by marked.js.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "check": "tsc --noEmit",
+    "predemo": "npm run build",
+    "demo": "node scripts/demo-server.mjs",
+    "test": "node --test --import tsx test/**/*.test.ts"
+  },
+  "keywords": [
+    "markdown",
+    "streaming",
+    "incremental",
+    "marked",
+    "renderer"
+  ],
+  "author": "qingyunwy",
+  "license": "MIT",
+  "dependencies": {
+    "katex": "^0.16.40",
+    "marked": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.8.0"
+  },
+  "packageManager": "pnpm@10.6.2+sha512.47870716bea1572b53df34ad8647b42962bc790ce2bf4562ba0f643237d7302a3d6a8ecef9e4bdfc01d23af1969aa90485d4cebb0b9638fa5ef1daef656f6c1b"
+}

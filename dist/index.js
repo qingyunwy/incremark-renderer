@@ -1,0 +1,1146 @@
+// src/block-boundary.ts
+var FENCE_PATTERN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+var SINGLE_LINE_BLOCK_PATTERN = /^(#{1,6}\s+.+| {0,3}([-*_])(?:\s*\2){2,}\s*)$/;
+var SETEXT_UNDERLINE_PATTERN = /^ {0,3}(=+|-+)\s*$/;
+function getCompletedLines(input) {
+  const lines = [];
+  let start = 0;
+  for (let index = 0; index < input.length; index += 1) {
+    if (input[index] === "\n") {
+      lines.push(input.slice(start, index + 1));
+      start = index + 1;
+    }
+  }
+  return {
+    lines,
+    rest: input.slice(start)
+  };
+}
+function stripLineEnding(line) {
+  return line.endsWith("\n") ? line.slice(0, -1) : line;
+}
+function isBlankLine(line) {
+  return /^\s*$/.test(stripLineEnding(line));
+}
+function getFenceStart(line) {
+  const match = stripLineEnding(line).match(FENCE_PATTERN);
+  const fence = match?.[1];
+  if (!fence) {
+    return null;
+  }
+  return {
+    marker: fence[0] ?? "`",
+    size: fence.length
+  };
+}
+function isFenceEnd(line, state) {
+  const trimmed = stripLineEnding(line);
+  const pattern = new RegExp(`^ {0,3}${state.marker}{${state.size},}\\s*$`);
+  return pattern.test(trimmed);
+}
+function classifyBufferedBlock(lines) {
+  const firstLine = lines[0];
+  if (lines.length === 1 && firstLine && SINGLE_LINE_BLOCK_PATTERN.test(stripLineEnding(firstLine))) {
+    return "single";
+  }
+  const secondLine = lines[1];
+  if (lines.length === 2 && secondLine && SETEXT_UNDERLINE_PATTERN.test(stripLineEnding(secondLine))) {
+    return "setext";
+  }
+  return "buffered";
+}
+function flushCurrentBlock(target, lines) {
+  while (lines.length > 0) {
+    const lastLine = lines[lines.length - 1];
+    if (!lastLine || !isBlankLine(lastLine)) {
+      break;
+    }
+    lines.pop();
+  }
+  if (lines.length > 0) {
+    target.push(lines.join(""));
+  }
+}
+function extractStableBlocks(input, finalize = false) {
+  const { lines, rest } = getCompletedLines(input);
+  const stableBlocks = [];
+  const current = [];
+  let fenceState = null;
+  for (const line of lines) {
+    if (fenceState) {
+      current.push(line);
+      if (isFenceEnd(line, fenceState)) {
+        flushCurrentBlock(stableBlocks, current);
+        current.length = 0;
+        fenceState = null;
+      }
+      continue;
+    }
+    if (current.length === 0) {
+      if (isBlankLine(line)) {
+        continue;
+      }
+      const start = getFenceStart(line);
+      if (start) {
+        current.push(line);
+        fenceState = start;
+        continue;
+      }
+      current.push(line);
+      const type = classifyBufferedBlock(current);
+      if (type === "single") {
+        flushCurrentBlock(stableBlocks, current);
+        current.length = 0;
+      }
+      continue;
+    }
+    current.push(line);
+    if (isBlankLine(line)) {
+      flushCurrentBlock(stableBlocks, current);
+      current.length = 0;
+      continue;
+    }
+    if (classifyBufferedBlock(current) === "setext") {
+      flushCurrentBlock(stableBlocks, current);
+      current.length = 0;
+    }
+  }
+  if (finalize) {
+    if (rest.length > 0) {
+      current.push(rest);
+    }
+    flushCurrentBlock(stableBlocks, current);
+    return { stableBlocks, tail: "" };
+  }
+  return {
+    stableBlocks,
+    tail: current.join("") + rest
+  };
+}
+
+// src/ast-diff.ts
+function getChildren(token) {
+  const nested = [];
+  if (Array.isArray(token.tokens)) {
+    nested.push(...token.tokens);
+  }
+  if (Array.isArray(token.items)) {
+    for (const item of token.items) {
+      if (Array.isArray(item.tokens)) {
+        nested.push(...item.tokens);
+      }
+      if (Array.isArray(item.items)) {
+        nested.push(...item.items);
+      }
+    }
+  }
+  return nested;
+}
+function digestValue(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(digestValue).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value).filter(([key]) => key !== "tokens").sort(([left], [right]) => left.localeCompare(right)).map(([key, entry]) => `${key}:${digestValue(entry)}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+function digestTokens(tokens) {
+  return tokens.map((token) => {
+    const base = digestValue(token);
+    const children = getChildren(token);
+    return children.length > 0 ? `${base}<${digestTokens(children)}>` : base;
+  }).join("|");
+}
+function tokenType(token) {
+  if (!token) {
+    return void 0;
+  }
+  return typeof token.type === "string" ? token.type : "unknown";
+}
+function diffTokenLists(previous, next, basePath, patches) {
+  const length = Math.max(previous.length, next.length);
+  for (let index = 0; index < length; index += 1) {
+    const prevToken = previous[index];
+    const nextToken = next[index];
+    const path = `${basePath}/${index}`;
+    if (!prevToken && nextToken) {
+      patches.push({ path, kind: "add", nextType: tokenType(nextToken) });
+      continue;
+    }
+    if (prevToken && !nextToken) {
+      patches.push({ path, kind: "remove", prevType: tokenType(prevToken) });
+      continue;
+    }
+    if (!prevToken || !nextToken) {
+      continue;
+    }
+    const prevDigest = digestValue(prevToken);
+    const nextDigest = digestValue(nextToken);
+    if (prevDigest !== nextDigest) {
+      patches.push({
+        path,
+        kind: "replace",
+        prevType: tokenType(prevToken),
+        nextType: tokenType(nextToken)
+      });
+      continue;
+    }
+    diffTokenLists(
+      getChildren(prevToken),
+      getChildren(nextToken),
+      `${path}/children`,
+      patches
+    );
+  }
+}
+function diffAst(previous, next) {
+  const patches = [];
+  diffTokenLists(previous, next, "root", patches);
+  return patches;
+}
+
+// src/renderers.ts
+var DefaultBlockRenderer = class {
+  marked;
+  constructor(marked) {
+    this.marked = marked;
+  }
+  renderBlock(block) {
+    return this.marked.parser(block.tokens);
+  }
+};
+function wrapBlockHtml(block, innerHtml) {
+  return `<div data-incremark-block="${block.key}" data-stable="${block.stable}">${innerHtml}</div>`;
+}
+
+// src/stream-markdown.ts
+import { Marked } from "marked";
+
+// src/math.ts
+import katex from "katex";
+var BLOCK_DOLLAR = "$$";
+var BLOCK_BRACKET_OPEN = "\\[";
+var BLOCK_BRACKET_CLOSE = "\\]";
+var INLINE_DOLLAR = "$";
+var INLINE_PAREN_OPEN = "\\(";
+var INLINE_PAREN_CLOSE = "\\)";
+function escapeHtml(value) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+function readDelimited(src, open, close, allowNewline) {
+  if (!src.startsWith(open)) {
+    return null;
+  }
+  let index = open.length;
+  while (index < src.length) {
+    if (src.startsWith(close, index)) {
+      const text = src.slice(open.length, index);
+      if (text.trim().length === 0) {
+        return null;
+      }
+      return {
+        raw: src.slice(0, index + close.length),
+        text
+      };
+    }
+    if (!allowNewline && src[index] === "\n") {
+      return null;
+    }
+    if (src[index] === "\\") {
+      index += 2;
+      continue;
+    }
+    index += 1;
+  }
+  return null;
+}
+function isEscaped(value, index) {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
+}
+function normalizeMathDelimiters(input) {
+  return normalizeMathSource(input).text;
+}
+function normalizeMathSource(input) {
+  let output = "";
+  let index = 0;
+  const segments = [];
+  while (index < input.length) {
+    if (input.startsWith(INLINE_PAREN_OPEN, index) && !isEscaped(input, index)) {
+      const match = readDelimited(input.slice(index), INLINE_PAREN_OPEN, INLINE_PAREN_CLOSE, false);
+      if (match) {
+        const normalizedRaw = `${INLINE_DOLLAR}${match.text}${INLINE_DOLLAR}`;
+        output += normalizedRaw;
+        segments.push({
+          normalizedRaw,
+          originalRaw: match.raw
+        });
+        index += match.raw.length;
+        continue;
+      }
+    }
+    if (input.startsWith(BLOCK_BRACKET_OPEN, index) && !isEscaped(input, index)) {
+      const match = readDelimited(input.slice(index), BLOCK_BRACKET_OPEN, BLOCK_BRACKET_CLOSE, true);
+      if (match) {
+        const normalizedRaw = `${BLOCK_DOLLAR}${match.text}${BLOCK_DOLLAR}`;
+        output += normalizedRaw;
+        segments.push({
+          normalizedRaw,
+          originalRaw: match.raw
+        });
+        index += match.raw.length;
+        continue;
+      }
+    }
+    output += input[index];
+    index += 1;
+  }
+  return {
+    text: output,
+    segments
+  };
+}
+function walkTokens(tokens, visitor) {
+  for (const token of tokens) {
+    visitor(token);
+    if (Array.isArray(token.tokens)) {
+      walkTokens(token.tokens, visitor);
+    }
+    if (Array.isArray(token.items)) {
+      for (const item of token.items) {
+        if (Array.isArray(item.tokens)) {
+          walkTokens(item.tokens, visitor);
+        }
+      }
+    }
+  }
+}
+function restoreOriginalMathRaw(tokens, segments) {
+  let segmentIndex = 0;
+  walkTokens(tokens, (token) => {
+    if (token.type !== "mathInline" && token.type !== "mathBlock" || segmentIndex >= segments.length) {
+      return;
+    }
+    const segment = segments[segmentIndex];
+    if (!segment) {
+      return;
+    }
+    if (token.raw === segment.normalizedRaw) {
+      token.raw = segment.originalRaw;
+      segmentIndex += 1;
+    }
+  });
+}
+function renderMath(token, options) {
+  try {
+    const markup = katex.renderToString(token.text, {
+      ...options?.katex ?? {},
+      displayMode: token.displayMode,
+      output: options?.katex?.output ?? "mathml",
+      throwOnError: options?.katex?.throwOnError ?? true
+    });
+    if (token.displayMode) {
+      return `<div class="incremark-math incremark-math-block">${markup}</div>`;
+    }
+    return `<span class="incremark-math incremark-math-inline">${markup}</span>`;
+  } catch (error) {
+    return escapeHtml(token.raw);
+  }
+}
+function createMathExtension(options) {
+  return {
+    hooks: {
+      preprocess(markdown) {
+        return normalizeMathDelimiters(markdown);
+      }
+    },
+    extensions: [
+      {
+        name: "mathBlock",
+        level: "block",
+        start(src) {
+          const dollar = src.indexOf(BLOCK_DOLLAR);
+          const bracket = src.indexOf(BLOCK_BRACKET_OPEN);
+          const candidates = [dollar, bracket].filter((value) => value >= 0);
+          if (candidates.length === 0) {
+            return;
+          }
+          return Math.min(...candidates);
+        },
+        tokenizer(src) {
+          const dollar = readDelimited(src, BLOCK_DOLLAR, BLOCK_DOLLAR, true);
+          if (dollar) {
+            return {
+              type: "mathBlock",
+              raw: dollar.raw,
+              text: dollar.text.trim(),
+              displayMode: true
+            };
+          }
+          const bracket = readDelimited(src, BLOCK_BRACKET_OPEN, BLOCK_BRACKET_CLOSE, true);
+          if (bracket) {
+            return {
+              type: "mathBlock",
+              raw: bracket.raw,
+              text: bracket.text.trim(),
+              displayMode: true
+            };
+          }
+          return;
+        },
+        renderer(token) {
+          return renderMath(token, options);
+        }
+      },
+      {
+        name: "mathInline",
+        level: "inline",
+        start(src) {
+          const dollar = src.indexOf(INLINE_DOLLAR);
+          const paren = src.indexOf(INLINE_PAREN_OPEN);
+          const candidates = [dollar, paren].filter((value) => value >= 0);
+          if (candidates.length === 0) {
+            return;
+          }
+          return Math.min(...candidates);
+        },
+        tokenizer(src) {
+          if (src.startsWith(BLOCK_DOLLAR)) {
+            return;
+          }
+          const dollar = readDelimited(src, INLINE_DOLLAR, INLINE_DOLLAR, false);
+          if (dollar) {
+            return {
+              type: "mathInline",
+              raw: dollar.raw,
+              text: dollar.text.trim(),
+              displayMode: false
+            };
+          }
+          const paren = readDelimited(src, INLINE_PAREN_OPEN, INLINE_PAREN_CLOSE, false);
+          if (paren) {
+            return {
+              type: "mathInline",
+              raw: paren.raw,
+              text: paren.text.trim(),
+              displayMode: false
+            };
+          }
+          return;
+        },
+        renderer(token) {
+          return renderMath(token, options);
+        }
+      }
+    ]
+  };
+}
+
+// src/stream-markdown.ts
+function makeSnapshot(blocks, sourceLength) {
+  return {
+    blocks,
+    stableCount: blocks.filter((block) => block.stable).length,
+    sourceLength
+  };
+}
+function cloneBlocks(blocks) {
+  return blocks.map((block) => ({ ...block }));
+}
+var StreamMarkdownRenderer = class {
+  marked;
+  mathEnabled;
+  renderer;
+  plugins;
+  stableBlocks = [];
+  source = "";
+  tail = "";
+  sequence = 0;
+  constructor(options = {}) {
+    this.mathEnabled = options.math !== false;
+    const mathOptions = options.math === false ? void 0 : options.math;
+    this.marked = this.mathEnabled ? new Marked(createMathExtension(mathOptions)) : new Marked();
+    if (options.marked) {
+      this.marked.setOptions(options.marked);
+    }
+    this.renderer = options.renderer ?? new DefaultBlockRenderer(this.marked);
+    this.plugins = options.plugins ?? [];
+  }
+  append(chunk) {
+    if (!chunk) {
+      return [];
+    }
+    this.source += chunk;
+    return this.reconcile(chunk, false);
+  }
+  setMarkdown(markdown) {
+    const previousBlocks = this.computeVisibleBlocks();
+    this.source = markdown;
+    this.tail = "";
+    this.sequence = 0;
+    this.stableBlocks.length = 0;
+    const extraction = extractStableBlocks(markdown, true);
+    for (const text of extraction.stableBlocks) {
+      this.stableBlocks.push(this.createBlock(text, true));
+    }
+    const nextBlocks = this.computeVisibleBlocks();
+    const patches = this.diffBlocks(previousBlocks, nextBlocks);
+    const snapshot = makeSnapshot(cloneBlocks(nextBlocks), this.source.length);
+    for (const plugin of this.plugins) {
+      plugin.onPatchesComputed?.(patches, snapshot);
+    }
+    return patches;
+  }
+  finalize() {
+    return this.reconcile("", true);
+  }
+  reset() {
+    this.source = "";
+    this.tail = "";
+    this.sequence = 0;
+    this.stableBlocks.length = 0;
+  }
+  getSnapshot() {
+    return makeSnapshot(this.getBlocks(), this.source.length);
+  }
+  getBlocks() {
+    return cloneBlocks(this.computeVisibleBlocks());
+  }
+  renderToString() {
+    return this.computeVisibleBlocks().map((block) => block.html).join("");
+  }
+  // `reconcile` is the core streaming loop:
+  // 1. re-scan only the previous tail plus the incoming chunk
+  // 2. freeze any newly stable blocks
+  // 3. keep the remaining tail mutable
+  // 4. diff previous vs next visible blocks to emit minimal render patches
+  reconcile(incomingChunk, finalize) {
+    const previousBlocks = this.computeVisibleBlocks();
+    const extraction = extractStableBlocks(this.tail + incomingChunk, finalize);
+    this.tail = extraction.tail;
+    for (const text of extraction.stableBlocks) {
+      this.stableBlocks.push(this.createBlock(text, true));
+    }
+    const nextBlocks = this.computeVisibleBlocks();
+    const patches = this.diffBlocks(previousBlocks, nextBlocks);
+    const snapshot = makeSnapshot(cloneBlocks(nextBlocks), this.source.length);
+    for (const plugin of this.plugins) {
+      plugin.onPatchesComputed?.(patches, snapshot);
+    }
+    return patches;
+  }
+  computeVisibleBlocks() {
+    const blocks = cloneBlocks(this.stableBlocks);
+    if (this.tail.length > 0) {
+      blocks.push(this.createBlock(this.tail, false, "tail"));
+    }
+    return blocks;
+  }
+  createBlock(text, stable, explicitKey) {
+    const normalizedMath = this.mathEnabled ? normalizeMathSource(text) : null;
+    const lexingText = normalizedMath?.text ?? text;
+    const tokens = this.marked.lexer(lexingText);
+    if (normalizedMath) {
+      restoreOriginalMathRaw(tokens, normalizedMath.segments);
+    }
+    const key = explicitKey ?? `block-${this.sequence += 1}`;
+    const draft = {
+      key,
+      text,
+      tokens,
+      digest: digestTokens(tokens),
+      html: "",
+      stable
+    };
+    let nextBlock = {
+      ...draft,
+      html: this.renderer.renderBlock(draft)
+    };
+    for (const plugin of this.plugins) {
+      nextBlock = plugin.onBlockParsed?.(nextBlock) ?? nextBlock;
+    }
+    return nextBlock;
+  }
+  diffBlocks(previous, next) {
+    const patches = [];
+    const max = Math.max(previous.length, next.length);
+    for (let index = 0; index < max; index += 1) {
+      const prevBlock = previous[index];
+      const nextBlock = next[index];
+      if (!prevBlock && nextBlock) {
+        patches.push({ type: "insert", key: nextBlock.key, index, block: nextBlock });
+        continue;
+      }
+      if (prevBlock && !nextBlock) {
+        patches.push({ type: "remove", key: prevBlock.key, index, previousBlock: prevBlock });
+        continue;
+      }
+      if (!prevBlock || !nextBlock) {
+        continue;
+      }
+      if (prevBlock.key !== nextBlock.key) {
+        patches.push({
+          type: "replace",
+          key: nextBlock.key,
+          index,
+          previousBlock: prevBlock,
+          block: nextBlock,
+          astPatches: diffAst(prevBlock.tokens, nextBlock.tokens)
+        });
+        continue;
+      }
+      if (prevBlock.digest !== nextBlock.digest || prevBlock.html !== nextBlock.html) {
+        patches.push({
+          type: "replace",
+          key: nextBlock.key,
+          index,
+          previousBlock: prevBlock,
+          block: nextBlock,
+          astPatches: diffAst(prevBlock.tokens, nextBlock.tokens)
+        });
+      }
+    }
+    return patches;
+  }
+};
+
+// src/dom-renderer.ts
+var IncrementalDomRenderer = class {
+  engine;
+  root;
+  constructor(root, options = {}) {
+    this.root = root;
+    this.engine = new StreamMarkdownRenderer(options);
+  }
+  append(chunk) {
+    const patches = this.engine.append(chunk);
+    this.applyPatches(patches);
+    return patches;
+  }
+  setMarkdown(markdown) {
+    const patches = this.engine.setMarkdown(markdown);
+    this.applyPatches(patches);
+    return patches;
+  }
+  finalize() {
+    const patches = this.engine.finalize();
+    this.applyPatches(patches);
+    return patches;
+  }
+  reset() {
+    this.engine.reset();
+    this.root.innerHTML = "";
+  }
+  getBlocks() {
+    return this.engine.getBlocks();
+  }
+  renderToString() {
+    return this.engine.renderToString();
+  }
+  // DOM application stays block-granular: each patch maps to one wrapper element,
+  // which keeps unchanged blocks mounted and avoids whole-container repaint work.
+  applyPatches(patches) {
+    for (const patch of patches) {
+      if (patch.type === "remove" && patch.previousBlock) {
+        this.getBlockNode(patch.previousBlock.key)?.remove();
+        continue;
+      }
+      if (!patch.block) {
+        continue;
+      }
+      const node = this.createBlockElement(patch.block);
+      const reference = this.getBlockChildren()[patch.index] ?? null;
+      if (patch.type === "insert") {
+        this.root.insertBefore(node, reference);
+        continue;
+      }
+      if (patch.type === "replace") {
+        const existing = patch.previousBlock ? this.getBlockNode(patch.previousBlock.key) : this.getBlockNode(patch.key);
+        existing?.replaceWith(node);
+      }
+    }
+  }
+  createBlockElement(block) {
+    const template = document.createElement("template");
+    template.innerHTML = wrapBlockHtml(block, block.html);
+    return template.content.firstElementChild;
+  }
+  getBlockNode(key) {
+    return this.root.querySelector(`[data-incremark-block="${key}"]`);
+  }
+  getBlockChildren() {
+    return Array.from(this.root.children).filter(
+      (child) => child instanceof HTMLElement && child.hasAttribute("data-incremark-block")
+    );
+  }
+};
+
+// src/full-render.ts
+function renderMarkdown(markdown, options = {}) {
+  const renderer = new StreamMarkdownRenderer(options);
+  renderer.setMarkdown(markdown);
+  return {
+    html: renderer.renderToString(),
+    blocks: renderer.getBlocks(),
+    snapshot: renderer.getSnapshot()
+  };
+}
+function renderMarkdownToString(markdown, options = {}) {
+  return renderMarkdown(markdown, options).html;
+}
+
+// src/typewriter-cursor.ts
+function getLastBlock(root) {
+  const blocks = root.querySelectorAll("[data-incremark-block]");
+  return blocks.length > 0 ? blocks.item(blocks.length - 1) : null;
+}
+function getCursorLineHeight(element) {
+  const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+  if (Number.isFinite(lineHeight)) {
+    return lineHeight;
+  }
+  const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
+  return Number.isFinite(fontSize) ? fontSize * 1.4 : 24;
+}
+function findCaretRect(root) {
+  const lastBlock = getLastBlock(root);
+  if (!lastBlock) {
+    return null;
+  }
+  const walker = document.createTreeWalker(
+    lastBlock,
+    NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+    {
+      acceptNode(node) {
+        if (node instanceof HTMLElement && node.classList.contains("incremark-typewriter-cursor")) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        if (node.nodeType === Node.TEXT_NODE) {
+          return node.textContent?.trim().length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+        }
+        return node instanceof HTMLElement ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+      }
+    }
+  );
+  let current = walker.nextNode();
+  let lastNode = null;
+  while (current) {
+    lastNode = current;
+    current = walker.nextNode();
+  }
+  if (!lastNode) {
+    return null;
+  }
+  const range = document.createRange();
+  if (lastNode.nodeType === Node.TEXT_NODE) {
+    const text = lastNode.textContent ?? "";
+    range.setStart(lastNode, text.length);
+    range.setEnd(lastNode, text.length);
+  } else {
+    range.selectNodeContents(lastNode);
+    range.collapse(false);
+  }
+  const rects = range.getClientRects();
+  const lastRect = rects.length > 0 ? rects.item(rects.length - 1) : null;
+  return lastRect ?? lastBlock.getBoundingClientRect();
+}
+var TypewriterCursorController = class {
+  root;
+  cursor;
+  autoScroll;
+  frame = null;
+  visible = false;
+  constructor(root, options = {}) {
+    this.root = root;
+    this.autoScroll = options.autoScroll ?? true;
+    this.cursor = document.createElement("span");
+    this.cursor.className = options.className ?? "incremark-typewriter-cursor";
+    this.cursor.setAttribute("aria-hidden", "true");
+    if (getComputedStyle(this.root).position === "static") {
+      this.root.style.position = "relative";
+    }
+    this.root.append(this.cursor);
+    this.hide();
+    window.addEventListener("resize", this.handleViewportChange);
+    window.addEventListener("scroll", this.handleViewportChange, true);
+  }
+  show() {
+    this.visible = true;
+    this.cursor.hidden = false;
+    this.update();
+  }
+  hide() {
+    this.visible = false;
+    this.cursor.hidden = true;
+  }
+  update() {
+    if (!this.visible) {
+      return;
+    }
+    if (this.frame !== null) {
+      cancelAnimationFrame(this.frame);
+    }
+    this.frame = requestAnimationFrame(() => {
+      const rect = findCaretRect(this.root);
+      const lastBlock = getLastBlock(this.root);
+      const rootRect = this.root.getBoundingClientRect();
+      const lineHeight = lastBlock ? getCursorLineHeight(lastBlock) : 24;
+      const top = rect ? rect.bottom - rootRect.top + this.root.scrollTop - lineHeight : this.root.scrollTop + 8;
+      const left = rect ? rect.right - rootRect.left + this.root.scrollLeft + 2 : this.root.scrollLeft + 8;
+      const height = Math.max(18, Math.min(lineHeight, rect?.height ?? lineHeight));
+      this.cursor.style.top = `${top}px`;
+      this.cursor.style.left = `${left}px`;
+      this.cursor.style.height = `${height}px`;
+      if (this.autoScroll) {
+        const cursorBottom = top + height;
+        const viewBottom = this.root.scrollTop + this.root.clientHeight;
+        if (cursorBottom > viewBottom - 24) {
+          this.root.scrollTop = cursorBottom - this.root.clientHeight + 24;
+        }
+      }
+    });
+  }
+  destroy() {
+    if (this.frame !== null) {
+      cancelAnimationFrame(this.frame);
+      this.frame = null;
+    }
+    window.removeEventListener("resize", this.handleViewportChange);
+    window.removeEventListener("scroll", this.handleViewportChange, true);
+    this.cursor.remove();
+  }
+  handleViewportChange = () => {
+    this.update();
+  };
+};
+
+// src/typewriter.ts
+var FENCE_PATTERN2 = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+var SENTENCE_END_PATTERN = /[.!?。！？]$/;
+var CLAUSE_END_PATTERN = /[,;:，；：、]$/;
+function startsFenceLine(line) {
+  return /^ {0,3}(`{3,}|~{3,})/.test(line);
+}
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+function isPreferredBreak(char) {
+  return /\s/.test(char) || /[,.!?;:，。！？；：、`]/.test(char);
+}
+function isStrongBreak(char) {
+  return /\n/.test(char) || /[.!?。！？]/.test(char);
+}
+function findChunkEnd(text, start, minChunkSize, maxChunkSize, inFence) {
+  const minEnd = Math.min(text.length, start + minChunkSize);
+  const maxEnd = Math.min(text.length, start + maxChunkSize);
+  const target = inFence ? Math.min(maxEnd, start + minChunkSize + 1) : maxEnd;
+  let preferred = -1;
+  let strong = -1;
+  for (let index = minEnd; index < target; index += 1) {
+    const char = text[index - 1];
+    if (!char) {
+      continue;
+    }
+    if (isStrongBreak(char)) {
+      strong = index;
+    } else if (isPreferredBreak(char)) {
+      preferred = index;
+    }
+  }
+  if (strong !== -1) {
+    return strong;
+  }
+  if (preferred !== -1) {
+    return preferred;
+  }
+  return target;
+}
+function computeDelay(chunk, baseDelayMs, inFence) {
+  const trimmed = chunk.trimEnd();
+  const lastChar = trimmed.at(-1) ?? chunk.at(-1) ?? "";
+  let delay = baseDelayMs;
+  if (trimmed.endsWith("```") || trimmed.endsWith("~~~")) {
+    delay += baseDelayMs * 2.4;
+  } else if (SENTENCE_END_PATTERN.test(lastChar)) {
+    delay += baseDelayMs * 1.8;
+  } else if (CLAUSE_END_PATTERN.test(lastChar)) {
+    delay += baseDelayMs * 1.1;
+  } else if (lastChar === "\n") {
+    delay += baseDelayMs * 0.7;
+  } else if (/\s/.test(lastChar)) {
+    delay += baseDelayMs * 0.2;
+  }
+  if (inFence) {
+    delay += baseDelayMs * 0.35;
+  }
+  return Math.max(0, Math.round(delay));
+}
+function updateFenceState(chunk, inFence, carry) {
+  const combined = carry + chunk;
+  const lines = combined.split("\n");
+  const nextCarry = combined.endsWith("\n") ? "" : lines.pop() ?? "";
+  let nextFence = inFence;
+  for (const line of lines) {
+    const trimmed = line.trimEnd();
+    const match = trimmed.match(FENCE_PATTERN2);
+    const fenceToken = match?.[1];
+    if (!fenceToken) {
+      continue;
+    }
+    if (!nextFence) {
+      nextFence = true;
+      continue;
+    }
+    const firstFenceChar = fenceToken[0];
+    const trimmedBody = trimmed.replace(/^ {0,3}/, "");
+    if (firstFenceChar && trimmedBody.startsWith(firstFenceChar)) {
+      nextFence = false;
+    }
+  }
+  return {
+    inFence: nextFence,
+    carry: nextCarry
+  };
+}
+function normalizeOptions(options) {
+  return {
+    baseDelayMs: options.baseDelayMs ?? 26,
+    minChunkSize: options.minChunkSize ?? 2,
+    maxChunkSize: options.maxChunkSize ?? 14,
+    onChunk: options.onChunk,
+    onComplete: options.onComplete ?? (() => {
+    }),
+    onPause: options.onPause ?? (() => {
+    }),
+    onResume: options.onResume ?? (() => {
+    }),
+    onStart: options.onStart ?? (() => {
+    }),
+    onStateChange: options.onStateChange ?? (() => {
+    }),
+    onStop: options.onStop ?? (() => {
+    })
+  };
+}
+var BaseMarkdownTypewriter = class {
+  options;
+  timer = null;
+  cursor = 0;
+  running = false;
+  state = "idle";
+  inFence = false;
+  lineCarry = "";
+  constructor(options) {
+    this.options = normalizeOptions(options);
+  }
+  start() {
+    if (this.running) {
+      return;
+    }
+    this.running = true;
+    this.transition("running");
+    this.options.onStart(this.getEventMeta());
+    this.kick();
+  }
+  pause() {
+    if (!this.running) {
+      return;
+    }
+    this.running = false;
+    this.clearTimer();
+    this.transition("paused");
+    this.options.onPause(this.getEventMeta());
+  }
+  resume() {
+    if (this.running) {
+      return;
+    }
+    if (this.isInputClosed() && this.cursor >= this.getText().length) {
+      return;
+    }
+    this.running = true;
+    this.transition("running");
+    this.options.onResume(this.getEventMeta());
+    this.kick();
+  }
+  stop() {
+    this.running = false;
+    this.clearTimer();
+    this.cursor = 0;
+    this.inFence = false;
+    this.lineCarry = "";
+    this.transition("stopped");
+    this.options.onStop(this.getEventMeta());
+  }
+  isRunning() {
+    return this.running;
+  }
+  kick() {
+    if (!this.running || this.timer !== null) {
+      return;
+    }
+    if (this.cursor < this.getText().length) {
+      this.scheduleNext(0);
+      return;
+    }
+    this.completeIfReady();
+  }
+  getEventMeta(lastChunk) {
+    const visibleInCodeFence = this.inFence || startsFenceLine(this.lineCarry);
+    return {
+      state: this.state,
+      cursor: this.cursor,
+      total: this.getText().length,
+      closed: this.isInputClosed(),
+      inCodeFence: visibleInCodeFence,
+      lastChunk
+    };
+  }
+  transition(nextState, lastChunk) {
+    if (this.state === nextState) {
+      return;
+    }
+    this.state = nextState;
+    this.options.onStateChange(this.getEventMeta(lastChunk));
+  }
+  scheduleNext(delayMs) {
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.tick();
+    }, delayMs);
+  }
+  clearTimer() {
+    if (this.timer === null) {
+      return;
+    }
+    clearTimeout(this.timer);
+    this.timer = null;
+  }
+  completeIfReady(lastChunk) {
+    if (!this.isInputClosed() || this.cursor < this.getText().length) {
+      return;
+    }
+    this.running = false;
+    this.clearTimer();
+    this.transition("completed", lastChunk);
+    this.options.onComplete(this.getEventMeta(lastChunk));
+  }
+  tick() {
+    if (!this.running) {
+      return;
+    }
+    const text = this.getText();
+    if (this.cursor >= text.length) {
+      this.completeIfReady();
+      return;
+    }
+    const progress = text.length === 0 ? 1 : this.cursor / text.length;
+    const speedFactor = progress < 0.12 ? 0.55 : progress < 0.82 ? 1 : 0.72;
+    const minChunkSize = this.options.minChunkSize;
+    const maxChunkSize = clamp(
+      Math.round(this.options.maxChunkSize * speedFactor),
+      minChunkSize,
+      this.options.maxChunkSize
+    );
+    const end = findChunkEnd(
+      text,
+      this.cursor,
+      minChunkSize,
+      maxChunkSize,
+      this.inFence
+    );
+    const chunk = text.slice(this.cursor, end);
+    this.cursor = end;
+    const fenceState = updateFenceState(chunk, this.inFence, this.lineCarry);
+    this.inFence = fenceState.inFence;
+    this.lineCarry = fenceState.carry;
+    const closed = this.isInputClosed();
+    const visibleInCodeFence = this.inFence || startsFenceLine(this.lineCarry);
+    const done = closed && this.cursor >= this.getText().length;
+    const delayMs = done ? 0 : computeDelay(chunk, this.options.baseDelayMs, this.inFence);
+    const meta = {
+      chunk,
+      chunkSize: chunk.length,
+      delayMs,
+      done,
+      closed,
+      inCodeFence: visibleInCodeFence,
+      cursor: this.cursor,
+      total: this.getText().length
+    };
+    this.options.onChunk(chunk, meta);
+    if (done) {
+      this.completeIfReady(chunk);
+      return;
+    }
+    if (this.cursor < this.getText().length) {
+      this.scheduleNext(delayMs);
+    }
+  }
+};
+var MarkdownTypewriter = class extends BaseMarkdownTypewriter {
+  text;
+  constructor(text, options) {
+    super(options);
+    this.text = text;
+  }
+  getText() {
+    return this.text;
+  }
+  isInputClosed() {
+    return true;
+  }
+};
+var StreamingMarkdownTypewriter = class extends BaseMarkdownTypewriter {
+  text = "";
+  closed = false;
+  constructor(options) {
+    super(options);
+  }
+  push(chunk) {
+    if (this.closed) {
+      throw new Error("Cannot push more markdown after close().");
+    }
+    if (!chunk) {
+      return;
+    }
+    this.text += chunk;
+    this.kick();
+  }
+  close() {
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
+    this.kick();
+  }
+  isClosed() {
+    return this.closed;
+  }
+  getText() {
+    return this.text;
+  }
+  isInputClosed() {
+    return this.closed;
+  }
+};
+export {
+  DefaultBlockRenderer,
+  IncrementalDomRenderer,
+  MarkdownTypewriter,
+  StreamMarkdownRenderer,
+  StreamingMarkdownTypewriter,
+  TypewriterCursorController,
+  createMathExtension,
+  diffAst,
+  digestTokens,
+  extractStableBlocks,
+  renderMarkdown,
+  renderMarkdownToString,
+  wrapBlockHtml
+};
