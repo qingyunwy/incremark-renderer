@@ -1,5 +1,11 @@
 import type { TypewriterCursorOptions } from './types.js';
 
+interface CaretMetrics {
+  rect: DOMRect;
+  lineHeight: number;
+  fontSize: number;
+}
+
 function getLastBlock(root: HTMLElement): HTMLElement | null {
   const blocks = root.querySelectorAll<HTMLElement>('[data-incremark-block]');
   return blocks.length > 0 ? blocks.item(blocks.length - 1) : null;
@@ -15,7 +21,51 @@ function getCursorLineHeight(element: HTMLElement): number {
   return Number.isFinite(fontSize) ? fontSize * 1.4 : 24;
 }
 
-function findCaretRect(root: HTMLElement): DOMRect | null {
+function getCursorFontSize(element: HTMLElement): number {
+  const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
+  return Number.isFinite(fontSize) ? fontSize : 16;
+}
+
+function needsMarkerMeasurement(node: Node): boolean {
+  if (node.nodeType !== Node.TEXT_NODE) {
+    return true;
+  }
+
+  const text = node.textContent ?? '';
+  return text.endsWith('\n');
+}
+
+function measureRangeWithMarker(range: Range): DOMRect | null {
+  const marker = document.createElement('span');
+  marker.setAttribute('aria-hidden', 'true');
+  marker.textContent = '\u200b';
+  marker.style.display = 'inline-block';
+  marker.style.width = '0';
+  marker.style.height = '1em';
+  marker.style.overflow = 'hidden';
+  marker.style.opacity = '0';
+  marker.style.pointerEvents = 'none';
+  marker.style.userSelect = 'none';
+  marker.style.verticalAlign = 'baseline';
+
+  range.insertNode(marker);
+  const normalizeTarget = marker.parentNode;
+  const rect = marker.getBoundingClientRect();
+  marker.remove();
+  normalizeTarget?.normalize();
+
+  return (rect.width || rect.height) ? rect : null;
+}
+
+function getCaretContextElement(lastNode: Node, lastBlock: HTMLElement): HTMLElement {
+  if (lastNode instanceof Text) {
+    return lastNode.parentElement ?? lastBlock;
+  }
+
+  return lastNode instanceof HTMLElement ? lastNode : lastBlock;
+}
+
+function findCaretMetrics(root: HTMLElement): CaretMetrics | null {
   const lastBlock = getLastBlock(root);
   if (!lastBlock) {
     return null;
@@ -55,6 +105,8 @@ function findCaretRect(root: HTMLElement): DOMRect | null {
     return null;
   }
 
+  const lineHeight = getCursorLineHeight(getCaretContextElement(lastNode, lastBlock));
+  const fontSize = getCursorFontSize(getCaretContextElement(lastNode, lastBlock));
   const range = document.createRange();
   if (lastNode.nodeType === Node.TEXT_NODE) {
     const text = lastNode.textContent ?? '';
@@ -67,7 +119,12 @@ function findCaretRect(root: HTMLElement): DOMRect | null {
 
   const rects = range.getClientRects();
   const lastRect = rects.length > 0 ? rects.item(rects.length - 1) : null;
-  return lastRect ?? lastBlock.getBoundingClientRect();
+  if (lastRect && !needsMarkerMeasurement(lastNode)) {
+    return { rect: lastRect, lineHeight, fontSize };
+  }
+
+  const rect = measureRangeWithMarker(range) ?? lastRect ?? lastBlock.getBoundingClientRect();
+  return { rect, lineHeight, fontSize };
 }
 
 export class TypewriterCursorController {
@@ -115,20 +172,21 @@ export class TypewriterCursorController {
     }
 
     this.frame = requestAnimationFrame(() => {
-      const rect = findCaretRect(this.root);
-      const lastBlock = getLastBlock(this.root);
+      const metrics = findCaretMetrics(this.root);
       const rootRect = this.root.getBoundingClientRect();
-      const lineHeight = lastBlock ? getCursorLineHeight(lastBlock) : 24;
+      const rect = metrics?.rect ?? null;
+      const lineHeight = metrics?.lineHeight ?? 24;
+      const fontSize = metrics?.fontSize ?? 16;
+      const rectHeight = rect?.height ?? fontSize;
+      const height = Math.max(18, Math.min(lineHeight, Math.max(fontSize, rectHeight * 0.92)));
       const top = rect
-        ? rect.bottom - rootRect.top + this.root.scrollTop - lineHeight
-        : this.root.scrollTop + 8;
+        ? rect.top - rootRect.top + this.root.scrollTop + ((rectHeight - height) / 2)
+        : this.root.scrollTop + 8 + Math.max(0, (lineHeight - height) / 2);
       const left = rect
         ? rect.right - rootRect.left + this.root.scrollLeft + 2
         : this.root.scrollLeft + 8;
-      const height = Math.max(18, Math.min(lineHeight, rect?.height ?? lineHeight));
 
-      this.cursor.style.top = `${top}px`;
-      this.cursor.style.left = `${left}px`;
+      this.cursor.style.transform = `translate3d(${left}px, ${top}px, 0)`;
       this.cursor.style.height = `${height}px`;
 
       if (this.autoScroll) {
