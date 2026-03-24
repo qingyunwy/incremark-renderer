@@ -17,16 +17,6 @@ interface MathToken extends Record<string, unknown> {
   displayMode: boolean;
 }
 
-interface NormalizedMathSegment {
-  normalizedRaw: string;
-  originalRaw: string;
-}
-
-interface NormalizedMathSource {
-  text: string;
-  segments: NormalizedMathSegment[];
-}
-
 function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -74,103 +64,6 @@ function readDelimited(
   return null;
 }
 
-function isEscaped(value: string, index: number): boolean {
-  let slashCount = 0;
-  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) {
-    slashCount += 1;
-  }
-  return slashCount % 2 === 1;
-}
-
-export function normalizeMathDelimiters(input: string): string {
-  return normalizeMathSource(input).text;
-}
-
-export function normalizeMathSource(input: string): NormalizedMathSource {
-  let output = '';
-  let index = 0;
-  const segments: NormalizedMathSegment[] = [];
-
-  while (index < input.length) {
-    if (input.startsWith(INLINE_PAREN_OPEN, index) && !isEscaped(input, index)) {
-      const match = readDelimited(input.slice(index), INLINE_PAREN_OPEN, INLINE_PAREN_CLOSE, false);
-      if (match) {
-        const normalizedRaw = `${INLINE_DOLLAR}${match.text}${INLINE_DOLLAR}`;
-        output += normalizedRaw;
-        segments.push({
-          normalizedRaw,
-          originalRaw: match.raw,
-        });
-        index += match.raw.length;
-        continue;
-      }
-    }
-
-    if (input.startsWith(BLOCK_BRACKET_OPEN, index) && !isEscaped(input, index)) {
-      const match = readDelimited(input.slice(index), BLOCK_BRACKET_OPEN, BLOCK_BRACKET_CLOSE, true);
-      if (match) {
-        const normalizedRaw = `${BLOCK_DOLLAR}${match.text}${BLOCK_DOLLAR}`;
-        output += normalizedRaw;
-        segments.push({
-          normalizedRaw,
-          originalRaw: match.raw,
-        });
-        index += match.raw.length;
-        continue;
-      }
-    }
-
-    output += input[index];
-    index += 1;
-  }
-
-  return {
-    text: output,
-    segments,
-  };
-}
-
-function walkTokens(tokens: Array<Record<string, unknown>>, visitor: (token: Record<string, unknown>) => void): void {
-  for (const token of tokens) {
-    visitor(token);
-
-    if (Array.isArray(token.tokens)) {
-      walkTokens(token.tokens as Array<Record<string, unknown>>, visitor);
-    }
-
-    if (Array.isArray(token.items)) {
-      for (const item of token.items as Array<Record<string, unknown>>) {
-        if (Array.isArray(item.tokens)) {
-          walkTokens(item.tokens as Array<Record<string, unknown>>, visitor);
-        }
-      }
-    }
-  }
-}
-
-export function restoreOriginalMathRaw(
-  tokens: Array<Record<string, unknown>>,
-  segments: NormalizedMathSegment[],
-): void {
-  let segmentIndex = 0;
-
-  walkTokens(tokens, (token) => {
-    if ((token.type !== 'mathInline' && token.type !== 'mathBlock') || segmentIndex >= segments.length) {
-      return;
-    }
-
-    const segment = segments[segmentIndex];
-    if (!segment) {
-      return;
-    }
-
-    if (token.raw === segment.normalizedRaw) {
-      token.raw = segment.originalRaw;
-      segmentIndex += 1;
-    }
-  });
-}
-
 function renderMath(token: MathToken, options?: MathRenderOptions): string {
   try {
     const markup = katex.renderToString(token.text, {
@@ -194,14 +87,6 @@ function renderMath(token: MathToken, options?: MathRenderOptions): string {
 // remains fully incremental while formulas become first-class tokens.
 export function createMathExtension(options?: MathRenderOptions): MarkedExtension {
   return {
-    hooks: {
-      preprocess(markdown) {
-        // marked treats backslash-delimited TeX forms similarly to escaped text in
-        // some inline contexts. Normalizing them up front keeps the downstream math
-        // tokenizer deterministic for both full and incremental parses.
-        return normalizeMathDelimiters(markdown);
-      },
-    },
     extensions: [
       {
         name: 'mathBlock',

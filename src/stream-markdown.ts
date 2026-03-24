@@ -3,11 +3,7 @@ import { Marked } from 'marked';
 import { diffAst, digestTokens } from './ast-diff.js';
 import { extractStableBlocks } from './block-boundary.js';
 import { createHighlightExtension } from './highlight.js';
-import {
-  createMathExtension,
-  normalizeMathSource,
-  restoreOriginalMathRaw,
-} from './math.js';
+import { createMathExtension } from './math.js';
 import { DefaultBlockRenderer } from './renderers.js';
 import type {
   RenderPatch,
@@ -148,12 +144,7 @@ export class StreamMarkdownRenderer {
     // Each block is lexed independently, so we never re-run marked.lexer for the
     // immutable stable prefix. Only fresh stable blocks and the mutable tail block
     // participate in incremental lexing.
-    const normalizedMath = this.mathEnabled ? normalizeMathSource(text) : null;
-    const lexingText = normalizedMath?.text ?? text;
-    const tokens = this.marked.lexer(lexingText) as TokensList;
-    if (normalizedMath) {
-      restoreOriginalMathRaw(tokens, normalizedMath.segments);
-    }
+    const tokens = this.marked.lexer(text) as TokensList;
     const key = explicitKey ?? `block-${this.sequence += 1}`;
     const draft: StableBlock = {
       key,

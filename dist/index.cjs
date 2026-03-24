@@ -425,86 +425,6 @@ function readDelimited(src, open, close, allowNewline) {
   }
   return null;
 }
-function isEscaped(value, index) {
-  let slashCount = 0;
-  for (let cursor = index - 1; cursor >= 0 && value[cursor] === "\\"; cursor -= 1) {
-    slashCount += 1;
-  }
-  return slashCount % 2 === 1;
-}
-function normalizeMathDelimiters(input) {
-  return normalizeMathSource(input).text;
-}
-function normalizeMathSource(input) {
-  let output = "";
-  let index = 0;
-  const segments = [];
-  while (index < input.length) {
-    if (input.startsWith(INLINE_PAREN_OPEN, index) && !isEscaped(input, index)) {
-      const match = readDelimited(input.slice(index), INLINE_PAREN_OPEN, INLINE_PAREN_CLOSE, false);
-      if (match) {
-        const normalizedRaw = `${INLINE_DOLLAR}${match.text}${INLINE_DOLLAR}`;
-        output += normalizedRaw;
-        segments.push({
-          normalizedRaw,
-          originalRaw: match.raw
-        });
-        index += match.raw.length;
-        continue;
-      }
-    }
-    if (input.startsWith(BLOCK_BRACKET_OPEN, index) && !isEscaped(input, index)) {
-      const match = readDelimited(input.slice(index), BLOCK_BRACKET_OPEN, BLOCK_BRACKET_CLOSE, true);
-      if (match) {
-        const normalizedRaw = `${BLOCK_DOLLAR}${match.text}${BLOCK_DOLLAR}`;
-        output += normalizedRaw;
-        segments.push({
-          normalizedRaw,
-          originalRaw: match.raw
-        });
-        index += match.raw.length;
-        continue;
-      }
-    }
-    output += input[index];
-    index += 1;
-  }
-  return {
-    text: output,
-    segments
-  };
-}
-function walkTokens(tokens, visitor) {
-  for (const token of tokens) {
-    visitor(token);
-    if (Array.isArray(token.tokens)) {
-      walkTokens(token.tokens, visitor);
-    }
-    if (Array.isArray(token.items)) {
-      for (const item of token.items) {
-        if (Array.isArray(item.tokens)) {
-          walkTokens(item.tokens, visitor);
-        }
-      }
-    }
-  }
-}
-function restoreOriginalMathRaw(tokens, segments) {
-  let segmentIndex = 0;
-  walkTokens(tokens, (token) => {
-    if (token.type !== "mathInline" && token.type !== "mathBlock" || segmentIndex >= segments.length) {
-      return;
-    }
-    const segment = segments[segmentIndex];
-    if (!segment) {
-      return;
-    }
-    if (token.raw === segment.normalizedRaw) {
-      token.raw = segment.originalRaw;
-      segmentIndex += 1;
-    }
-  });
-}
 function renderMath(token, options) {
   try {
     const markup = import_katex.default.renderToString(token.text, {
@@ -523,11 +443,6 @@ function renderMath(token, options) {
 }
 function createMathExtension(options) {
   return {
-    hooks: {
-      preprocess(markdown) {
-        return normalizeMathDelimiters(markdown);
-      }
-    },
     extensions: [
       {
         name: "mathBlock",
@@ -718,12 +633,7 @@ var StreamMarkdownRenderer = class {
     return blocks;
   }
   createBlock(text, stable, explicitKey) {
-    const normalizedMath = this.mathEnabled ? normalizeMathSource(text) : null;
-    const lexingText = normalizedMath?.text ?? text;
-    const tokens = this.marked.lexer(lexingText);
-    if (normalizedMath) {
-      restoreOriginalMathRaw(tokens, normalizedMath.segments);
-    }
+    const tokens = this.marked.lexer(text);
     const key = explicitKey ?? `block-${this.sequence += 1}`;
     const draft = {
       key,

@@ -62,3 +62,23 @@ test('falls back to the original block formula when KaTeX throws', () => {
   assert.match(html, /\\\[\n\\notacommand\{1\}\n\\\]/);
   assert.doesNotMatch(html, /incremark-math-block/);
 });
+
+test('preserves backslash-delimited math markers inside inline code spans', () => {
+  const renderer = new StreamMarkdownRenderer();
+  renderer.append('- 行内公式：`$...$`、`\\(...\\)`\n- 块级公式：`$$...$$`、`\\[...\\]`');
+  renderer.finalize();
+
+  const html = renderer.renderToString();
+  assert.match(html, /<code>\$...\$<\/code>、<code>\\\(...\\\)<\/code>/);
+  assert.match(html, /<code>\$\$...\$\$<\/code>、<code>\\\[\.\.\.\\\]<\/code>/);
+});
+
+test('preserves backslash-delimited math markers inside fenced code blocks', () => {
+  const renderer = new StreamMarkdownRenderer();
+  renderer.append('```md\n\\(...\\)\n\\[...\\]\n```');
+  renderer.finalize();
+
+  const html = renderer.renderToString();
+  assert.ok(html.includes('\\(...\\)'));
+  assert.ok(html.includes('\\[...\\]'));
+});
