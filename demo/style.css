@@ -239,10 +239,104 @@ button:hover {
 
 .preview pre {
   overflow: auto;
+  margin: 0;
   padding: 14px;
   border-radius: 16px;
   background: #1f2430;
   color: #f7f2ea;
+}
+
+.preview .incremark-code-block {
+  overflow: hidden;
+  border-radius: 16px;
+  background: #1f2430;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.preview .incremark-code-block-header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 2.2rem;
+  padding: 0.5rem 0.8rem 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0)),
+    #1f2430;
+}
+
+.preview .incremark-code-language {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.16rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #c8d1df;
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
+.preview .incremark-code-block pre {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.preview pre code {
+  display: block;
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+}
+
+.preview .hljs {
+  color: #f7f2ea;
+  background: transparent;
+}
+
+.preview .hljs-comment,
+.preview .hljs-quote {
+  color: #7a8394;
+}
+
+.preview .hljs-keyword,
+.preview .hljs-selector-tag,
+.preview .hljs-literal,
+.preview .hljs-name {
+  color: #ffad66;
+}
+
+.preview .hljs-title,
+.preview .hljs-title.class_,
+.preview .hljs-title.function_,
+.preview .hljs-attribute,
+.preview .hljs-property {
+  color: #ffd173;
+}
+
+.preview .hljs-string,
+.preview .hljs-regexp,
+.preview .hljs-meta .hljs-string {
+  color: #aad94c;
+}
+
+.preview .hljs-number,
+.preview .hljs-symbol,
+.preview .hljs-bullet {
+  color: #f28779;
+}
+
+.preview .hljs-variable,
+.preview .hljs-template-variable,
+.preview .hljs-subst,
+.preview .hljs-operator {
+  color: #73d0ff;
+}
+
+.preview .hljs-built_in,
+.preview .hljs-type,
+.preview .hljs-meta,
+.preview .hljs-doctag {
+  color: #5ccfe6;
 }
 
 .preview blockquote {
@@ -277,7 +371,7 @@ button:hover {
   top: 0;
   left: 0;
   z-index: 3;
-  width: 0.56rem;
+  width: 0.16rem;
   border-radius: 999px;
   background: linear-gradient(180deg, #c45b2d 0%, #f2b15a 100%);
   box-shadow: 0 0 0 1px rgba(196, 91, 45, 0.12), 0 0 18px rgba(196, 91, 45, 0.25);

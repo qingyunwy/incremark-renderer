@@ -11,6 +11,7 @@
 - 历史消息 / 非流式场景下的全量渲染 API
 - ChatGPT 风格的自适应打字机播放
 - 打字光标跟随控制器
+- 内置 fenced code block 代码高亮能力
 - TeX / LaTeX 行内与块级数学公式渲染
 
 English documentation: [README.md](./README.md)
@@ -205,6 +206,38 @@ const renderer = new StreamMarkdownRenderer({
 ```ts
 const renderer = new StreamMarkdownRenderer({
   math: false,
+});
+```
+
+## 代码高亮
+
+带语言标记的 fenced code block 默认会启用语法高亮。
+渲染结果会输出 `hljs`、`language-*` 以及 `incremark-code-language` 相关结构，方便你在应用层自行接入主题样式。
+
+```ts
+import { renderMarkdownToString } from 'incremark-renderer';
+
+const html = renderMarkdownToString('```ts\nconst value = 1;\n```');
+```
+
+如果你希望对没有语言标记的代码块做自动识别，可以这样配置：
+
+```ts
+import { StreamMarkdownRenderer } from 'incremark-renderer';
+
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    autoDetect: true,
+    languages: ['javascript', 'typescript', 'json'],
+  },
+});
+```
+
+如果你想关闭语法高亮，保留 `marked` 默认代码块输出：
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: false,
 });
 ```
 

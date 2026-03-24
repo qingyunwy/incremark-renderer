@@ -40,9 +40,16 @@ export interface FullRenderResult {
   snapshot: StreamRendererSnapshot;
 }
 
+export interface CodeHighlightOptions {
+  autoDetect?: boolean;
+  defaultLanguage?: string;
+  languages?: string[];
+}
+
 export interface StreamMarkdownOptions {
   marked?: MarkedOptions;
   math?: MathRenderOptions | false;
+  highlight?: CodeHighlightOptions | false;
   renderer?: BlockRenderer;
   plugins?: StreamMarkdownPlugin[];
 }

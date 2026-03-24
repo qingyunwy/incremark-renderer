@@ -20,6 +20,36 @@ test('renderMarkdown returns blocks and snapshot for full rendering', () => {
   assert.equal(result.snapshot.sourceLength, '## Title\n\nBody'.length);
 });
 
+test('renderMarkdownToString highlights fenced code blocks with explicit languages', () => {
+  const html = renderMarkdownToString('```ts\nconst value = 1;\n```');
+  assert.match(html, /incremark-code-language">ts<\/span>/);
+  assert.match(html, /class="hljs language-ts"/);
+  assert.match(html, /hljs-keyword/);
+});
+
+test('renderMarkdownToString can auto-detect languages for fenced code blocks', () => {
+  const html = renderMarkdownToString('```\nconst value = 1;\n```', {
+    highlight: {
+      autoDetect: true,
+      languages: ['javascript', 'typescript'],
+    },
+  });
+
+  assert.match(html, /incremark-code-language">(javascript|typescript)<\/span>/);
+  assert.match(html, /class="hljs language-(javascript|typescript)"/);
+  assert.match(html, /hljs-keyword/);
+});
+
+test('renderMarkdownToString can disable syntax highlighting', () => {
+  const html = renderMarkdownToString('```ts\nconst value = 1;\n```', {
+    highlight: false,
+  });
+
+  assert.match(html, /incremark-code-language">ts<\/span>/);
+  assert.match(html, /<pre><code class="language-ts">const value = 1;/);
+  assert.doesNotMatch(html, /class="hljs/);
+});
+
 test('StreamMarkdownRenderer.setMarkdown replaces current state with full content', () => {
   const renderer = new StreamMarkdownRenderer();
   renderer.append('# Draft');

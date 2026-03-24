@@ -34,9 +34,15 @@ interface FullRenderResult {
     blocks: StableBlock[];
     snapshot: StreamRendererSnapshot;
 }
+interface CodeHighlightOptions {
+    autoDetect?: boolean;
+    defaultLanguage?: string;
+    languages?: string[];
+}
 interface StreamMarkdownOptions {
     marked?: MarkedOptions;
     math?: MathRenderOptions | false;
+    highlight?: CodeHighlightOptions | false;
     renderer?: BlockRenderer;
     plugins?: StreamMarkdownPlugin[];
 }
@@ -115,6 +121,10 @@ declare class IncrementalDomRenderer {
 
 declare function renderMarkdown(markdown: string, options?: StreamMarkdownOptions): FullRenderResult;
 declare function renderMarkdownToString(markdown: string, options?: StreamMarkdownOptions): string;
+
+declare function createHighlightExtension(options?: CodeHighlightOptions, runtime?: {
+    highlightEnabled?: boolean;
+}): MarkedExtension<string, string>;
 
 declare function createMathExtension(options?: MathRenderOptions): MarkedExtension;
 
@@ -203,4 +213,4 @@ declare class StreamingMarkdownTypewriter extends BaseMarkdownTypewriter {
     protected isInputClosed(): boolean;
 }
 
-export { type AstNodePatch, type BlockExtractionResult, type BlockRenderer, DefaultBlockRenderer, type FullRenderResult, IncrementalDomRenderer, MarkdownTypewriter, type MathRenderOptions, type RenderPatch, type StableBlock, type StreamMarkdownOptions, type StreamMarkdownPlugin, StreamMarkdownRenderer, type StreamRendererSnapshot, StreamingMarkdownTypewriter, type TokensList, type TypewriterChunkMeta, TypewriterCursorController, type TypewriterCursorOptions, type TypewriterEventMeta, type TypewriterOptions, type TypewriterState, createMathExtension, diffAst, digestTokens, extractStableBlocks, renderMarkdown, renderMarkdownToString, wrapBlockHtml };
+export { type AstNodePatch, type BlockExtractionResult, type BlockRenderer, type CodeHighlightOptions, DefaultBlockRenderer, type FullRenderResult, IncrementalDomRenderer, MarkdownTypewriter, type MathRenderOptions, type RenderPatch, type StableBlock, type StreamMarkdownOptions, type StreamMarkdownPlugin, StreamMarkdownRenderer, type StreamRendererSnapshot, StreamingMarkdownTypewriter, type TokensList, type TypewriterChunkMeta, TypewriterCursorController, type TypewriterCursorOptions, type TypewriterEventMeta, type TypewriterOptions, type TypewriterState, createHighlightExtension, createMathExtension, diffAst, digestTokens, extractStableBlocks, renderMarkdown, renderMarkdownToString, wrapBlockHtml };

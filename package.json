@@ -20,7 +20,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "build": "tsup --config tsup.config.ts",
     "check": "tsc --noEmit",
     "predemo": "npm run build",
     "demo": "node scripts/demo-server.mjs",
@@ -34,8 +34,14 @@
     "renderer"
   ],
   "author": "qingyunwy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qingyunwy/incremark-renderer.git"
+  },
+  "homepage": "https://github.com/qingyunwy/incremark-renderer#readme",
   "license": "MIT",
   "dependencies": {
+    "highlight.js": "^11.11.1",
     "katex": "^0.16.40",
     "marked": "^16.0.0"
   },

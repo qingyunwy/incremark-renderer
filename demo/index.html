@@ -8,9 +8,7 @@
     <script type="importmap">
       {
         "imports": {
-          "incremark-renderer": "/dist/index.js",
-          "katex": "/node_modules/katex/dist/katex.mjs",
-          "marked": "/node_modules/marked/lib/marked.esm.js"
+          "incremark-renderer": "/dist/index.js"
         }
       }
     </script>
@@ -43,11 +41,11 @@
         <div class="toolbar">
           <label class="field compact">
             <span>每次 chunk 大小</span>
-            <input id="chunk-size" type="number" min="1" value="18" />
+            <input id="chunk-size" type="number" min="1" value="5" />
           </label>
           <label class="field compact">
             <span>打字基础节奏（ms）</span>
-            <input id="play-interval" type="number" min="8" step="2" value="26" />
+            <input id="play-interval" type="number" min="8" step="2" value="17" />
           </label>
           <button id="reset-button" type="button">重置</button>
           <button id="step-button" type="button">追加一段</button>

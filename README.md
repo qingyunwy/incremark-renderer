@@ -7,6 +7,7 @@
 - AST-aware diffing to generate minimal render patches
 - a DOM renderer that applies partial updates instead of full reflow/repaint
 - a ChatGPT-style markdown typewriter for frontend streaming playback
+- built-in fenced code syntax highlighting powered by `highlight.js`
 - TeX/LaTeX math support for inline and block formulas
 
 Chinese documentation: [README.zh-CN.md](./README.zh-CN.md)
@@ -23,6 +24,7 @@ npm install incremark-renderer
 - Re-lexes only newly stabilized blocks and the current mutable tail.
 - Exposes dedicated full-render APIs for history and non-streaming views.
 - Emits block-level render patches so unchanged DOM stays mounted.
+- Highlights fenced code blocks out of the box and emits `hljs` / `language-*` classes.
 - Supports inline math, block math, adaptive typewriter playback, and a DOM cursor controller.
 
 ## Quick Start
@@ -166,6 +168,39 @@ To disable math handling entirely:
 ```ts
 const renderer = new StreamMarkdownRenderer({
   math: false,
+});
+```
+
+## Code Highlighting
+
+Fenced code blocks with an explicit language info string are highlighted by default.
+The renderer emits `hljs`, `language-*`, and `incremark-code-language` related markup,
+so you can attach your own theme styles in the app layer.
+
+```ts
+import { renderMarkdownToString } from 'incremark-renderer';
+
+const html = renderMarkdownToString('```ts\nconst value = 1;\n```');
+```
+
+To auto-detect untagged fenced blocks or force a default language:
+
+```ts
+import { StreamMarkdownRenderer } from 'incremark-renderer';
+
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    autoDetect: true,
+    languages: ['javascript', 'typescript', 'json'],
+  },
+});
+```
+
+Disable syntax highlighting if you want plain `marked` code block output:
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: false,
 });
 ```
 

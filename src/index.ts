@@ -2,6 +2,7 @@ export { extractStableBlocks } from './block-boundary.js';
 export { diffAst, digestTokens } from './ast-diff.js';
 export { IncrementalDomRenderer } from './dom-renderer.js';
 export { renderMarkdown, renderMarkdownToString } from './full-render.js';
+export { createHighlightExtension } from './highlight.js';
 export { createMathExtension } from './math.js';
 export { DefaultBlockRenderer, wrapBlockHtml } from './renderers.js';
 export { StreamMarkdownRenderer } from './stream-markdown.js';
@@ -11,6 +12,7 @@ export type {
   AstNodePatch,
   BlockExtractionResult,
   BlockRenderer,
+  CodeHighlightOptions,
   FullRenderResult,
   MathRenderOptions,
   RenderPatch,
