@@ -21,8 +21,9 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsup --config tsup.config.ts",
+    "build:demo-vendor": "node scripts/build-demo-vendor.mjs",
     "check": "tsc --noEmit",
-    "predemo": "npm run build",
+    "predemo": "npm run build && npm run build:demo-vendor",
     "demo": "node scripts/demo-server.mjs",
     "test": "node --test --import tsx test/**/*.test.ts"
   },
@@ -47,6 +48,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "esbuild": "^0.27.4",
     "tsup": "^8.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.8.0"
