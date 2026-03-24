@@ -1,6 +1,6 @@
 {
   "name": "incremark-renderer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Streaming Markdown renderer with incremental lexing, AST diffing, and partial DOM updates powered by marked.js.",
   "type": "module",
   "main": "./dist/index.cjs",
