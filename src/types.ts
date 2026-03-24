@@ -40,10 +40,23 @@ export interface FullRenderResult {
   snapshot: StreamRendererSnapshot;
 }
 
+export interface CodeBlockHeaderRenderContext {
+  code: string;
+  language?: string;
+  declaredLanguage?: string;
+  highlighted: boolean;
+  defaultHeaderContent: string;
+}
+
+export type CodeBlockHeaderRenderer = (
+  context: CodeBlockHeaderRenderContext,
+) => string | null | undefined;
+
 export interface CodeHighlightOptions {
   autoDetect?: boolean;
   defaultLanguage?: string;
   languages?: string[];
+  renderHeader?: CodeBlockHeaderRenderer;
 }
 
 export interface StreamMarkdownOptions {

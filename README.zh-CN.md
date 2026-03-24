@@ -241,6 +241,31 @@ const renderer = new StreamMarkdownRenderer({
 });
 ```
 
+如果你想自定义 `incremark-code-block-header` 区域，比如加复制按钮或其他操作按钮：
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    renderHeader: ({ code, defaultHeaderContent }) => {
+      const encoded = encodeURIComponent(code);
+      return `${defaultHeaderContent}<button type="button" class="copy-button" data-copy-code="${encoded}">复制</button>`;
+    },
+  },
+});
+
+root.addEventListener('click', async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) {
+    return;
+  }
+  const encoded = target.dataset.copyCode;
+  if (!encoded) {
+    return;
+  }
+  await navigator.clipboard.writeText(decodeURIComponent(encoded));
+});
+```
+
 ## 打字机播放
 
 ```ts

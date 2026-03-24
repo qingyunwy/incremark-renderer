@@ -1,7 +1,10 @@
 import hljs from 'highlight.js';
 import type { MarkedExtension, Tokens } from 'marked';
 
-import type { CodeHighlightOptions } from './types.js';
+import type {
+  CodeBlockHeaderRenderContext,
+  CodeHighlightOptions,
+} from './types.js';
 
 const TRAILING_NEWLINE_RE = /\n$/u;
 const INFO_LANGUAGE_RE = /^\S+/u;
@@ -48,12 +51,43 @@ function renderLanguageBadge(language?: string): string {
     return '';
   }
 
-  return `<div class="incremark-code-block-header"><span class="incremark-code-language">${escapeHtml(language)}</span></div>`;
+  return `<span class="incremark-code-language">${escapeHtml(language)}</span>`;
 }
 
-function renderCodeBlock(html: string, options: { classes?: string; language?: string }): string {
+function renderCodeBlockHeader(
+  options: Pick<CodeBlockHeaderRenderContext, 'code' | 'language' | 'declaredLanguage' | 'highlighted'> &
+    Pick<CodeHighlightOptions, 'renderHeader'>,
+): string {
+  const context: CodeBlockHeaderRenderContext = {
+    code: options.code,
+    language: options.language,
+    declaredLanguage: options.declaredLanguage,
+    highlighted: options.highlighted,
+    defaultHeaderContent: renderLanguageBadge(options.language),
+  };
+  const customHeader = options.renderHeader?.(context);
+  const headerContent = customHeader === undefined ? context.defaultHeaderContent : customHeader;
+
+  if (!headerContent) {
+    return '';
+  }
+
+  return `<div class="incremark-code-block-header">${headerContent}</div>`;
+}
+
+function renderCodeBlock(
+  html: string,
+  options: {
+    classes?: string;
+    code: string;
+    declaredLanguage?: string;
+    highlighted: boolean;
+    language?: string;
+    renderHeader?: CodeHighlightOptions['renderHeader'];
+  },
+): string {
   const classAttribute = options.classes ? ` class="${options.classes}"` : '';
-  return `<div class="incremark-code-block"${buildWrapperAttributes(options.language)}>${renderLanguageBadge(options.language)}<pre><code${classAttribute}>${html}</code></pre></div>\n`;
+  return `<div class="incremark-code-block"${buildWrapperAttributes(options.language)}>${renderCodeBlockHeader(options)}<pre><code${classAttribute}>${html}</code></pre></div>\n`;
 }
 
 function getAutoDetectLanguages(options: CodeHighlightOptions): string[] | undefined {
@@ -73,31 +107,40 @@ export function createHighlightExtension(
   return {
     renderer: {
       code(token: Tokens.Code): string {
-        const code = normalizeCodeText(token.text);
-        const explicitLanguage = normalizeLanguage(token.lang);
-        const fallbackLanguage = explicitLanguage
+        const sourceCode = token.text;
+        const renderedCode = normalizeCodeText(sourceCode);
+        const declaredLanguage = normalizeLanguage(token.lang);
+        const fallbackLanguage = declaredLanguage
           ? undefined
           : normalizeLanguage(options.defaultLanguage);
-        const configuredLanguage = explicitLanguage ?? fallbackLanguage;
+        const configuredLanguage = declaredLanguage ?? fallbackLanguage;
 
         try {
           if (highlightEnabled && configuredLanguage && hljs.getLanguage(configuredLanguage)) {
-            const result = hljs.highlight(code, {
+            const result = hljs.highlight(renderedCode, {
               language: configuredLanguage,
               ignoreIllegals: true,
             });
             return renderCodeBlock(result.value, {
               classes: buildCodeClassName(configuredLanguage),
+              code: sourceCode,
+              declaredLanguage,
+              highlighted: true,
               language: configuredLanguage,
+              renderHeader: options.renderHeader,
             });
           }
 
           if (highlightEnabled && options.autoDetect) {
-            const result = hljs.highlightAuto(code, getAutoDetectLanguages(options));
+            const result = hljs.highlightAuto(renderedCode, getAutoDetectLanguages(options));
             if (result.language) {
               return renderCodeBlock(result.value, {
                 classes: buildCodeClassName(result.language),
+                code: sourceCode,
+                declaredLanguage,
+                highlighted: true,
                 language: result.language,
+                renderHeader: options.renderHeader,
               });
             }
           }
@@ -105,14 +148,18 @@ export function createHighlightExtension(
           // Fall back to plain escaped code below.
         }
 
-        const plainCode = token.escaped ? code : escapeHtml(code);
+        const plainCode = token.escaped ? renderedCode : escapeHtml(renderedCode);
         const className = configuredLanguage
           ? `language-${escapeHtml(configuredLanguage)}`
           : undefined;
 
         return renderCodeBlock(plainCode, {
           classes: className,
+          code: sourceCode,
+          declaredLanguage,
+          highlighted: false,
           language: configuredLanguage,
+          renderHeader: options.renderHeader,
         });
       },
     },

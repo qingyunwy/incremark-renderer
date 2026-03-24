@@ -34,10 +34,19 @@ interface FullRenderResult {
     blocks: StableBlock[];
     snapshot: StreamRendererSnapshot;
 }
+interface CodeBlockHeaderRenderContext {
+    code: string;
+    language?: string;
+    declaredLanguage?: string;
+    highlighted: boolean;
+    defaultHeaderContent: string;
+}
+type CodeBlockHeaderRenderer = (context: CodeBlockHeaderRenderContext) => string | null | undefined;
 interface CodeHighlightOptions {
     autoDetect?: boolean;
     defaultLanguage?: string;
     languages?: string[];
+    renderHeader?: CodeBlockHeaderRenderer;
 }
 interface StreamMarkdownOptions {
     marked?: MarkedOptions;
@@ -213,4 +222,4 @@ declare class StreamingMarkdownTypewriter extends BaseMarkdownTypewriter {
     protected isInputClosed(): boolean;
 }
 
-export { type AstNodePatch, type BlockExtractionResult, type BlockRenderer, type CodeHighlightOptions, DefaultBlockRenderer, type FullRenderResult, IncrementalDomRenderer, MarkdownTypewriter, type MathRenderOptions, type RenderPatch, type StableBlock, type StreamMarkdownOptions, type StreamMarkdownPlugin, StreamMarkdownRenderer, type StreamRendererSnapshot, StreamingMarkdownTypewriter, type TokensList, type TypewriterChunkMeta, TypewriterCursorController, type TypewriterCursorOptions, type TypewriterEventMeta, type TypewriterOptions, type TypewriterState, createHighlightExtension, createMathExtension, diffAst, digestTokens, extractStableBlocks, renderMarkdown, renderMarkdownToString, wrapBlockHtml };
+export { type AstNodePatch, type BlockExtractionResult, type BlockRenderer, type CodeBlockHeaderRenderContext, type CodeBlockHeaderRenderer, type CodeHighlightOptions, DefaultBlockRenderer, type FullRenderResult, IncrementalDomRenderer, MarkdownTypewriter, type MathRenderOptions, type RenderPatch, type StableBlock, type StreamMarkdownOptions, type StreamMarkdownPlugin, StreamMarkdownRenderer, type StreamRendererSnapshot, StreamingMarkdownTypewriter, type TokensList, type TypewriterChunkMeta, TypewriterCursorController, type TypewriterCursorOptions, type TypewriterEventMeta, type TypewriterOptions, type TypewriterState, createHighlightExtension, createMathExtension, diffAst, digestTokens, extractStableBlocks, renderMarkdown, renderMarkdownToString, wrapBlockHtml };

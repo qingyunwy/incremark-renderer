@@ -12,6 +12,8 @@ export type {
   AstNodePatch,
   BlockExtractionResult,
   BlockRenderer,
+  CodeBlockHeaderRenderContext,
+  CodeBlockHeaderRenderer,
   CodeHighlightOptions,
   FullRenderResult,
   MathRenderOptions,

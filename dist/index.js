@@ -257,11 +257,26 @@ function renderLanguageBadge(language) {
   if (!language) {
     return "";
   }
-  return `<div class="incremark-code-block-header"><span class="incremark-code-language">${escapeHtml(language)}</span></div>`;
+  return `<span class="incremark-code-language">${escapeHtml(language)}</span>`;
+}
+function renderCodeBlockHeader(options) {
+  const context = {
+    code: options.code,
+    language: options.language,
+    declaredLanguage: options.declaredLanguage,
+    highlighted: options.highlighted,
+    defaultHeaderContent: renderLanguageBadge(options.language)
+  };
+  const customHeader = options.renderHeader?.(context);
+  const headerContent = customHeader === void 0 ? context.defaultHeaderContent : customHeader;
+  if (!headerContent) {
+    return "";
+  }
+  return `<div class="incremark-code-block-header">${headerContent}</div>`;
 }
 function renderCodeBlock(html, options) {
   const classAttribute = options.classes ? ` class="${options.classes}"` : "";
-  return `<div class="incremark-code-block"${buildWrapperAttributes(options.language)}>${renderLanguageBadge(options.language)}<pre><code${classAttribute}>${html}</code></pre></div>
+  return `<div class="incremark-code-block"${buildWrapperAttributes(options.language)}>${renderCodeBlockHeader(options)}<pre><code${classAttribute}>${html}</code></pre></div>
 `;
 }
 function getAutoDetectLanguages(options) {
@@ -273,37 +288,50 @@ function createHighlightExtension(options = {}, runtime = {}) {
   return {
     renderer: {
       code(token) {
-        const code = normalizeCodeText(token.text);
-        const explicitLanguage = normalizeLanguage(token.lang);
-        const fallbackLanguage = explicitLanguage ? void 0 : normalizeLanguage(options.defaultLanguage);
-        const configuredLanguage = explicitLanguage ?? fallbackLanguage;
+        const sourceCode = token.text;
+        const renderedCode = normalizeCodeText(sourceCode);
+        const declaredLanguage = normalizeLanguage(token.lang);
+        const fallbackLanguage = declaredLanguage ? void 0 : normalizeLanguage(options.defaultLanguage);
+        const configuredLanguage = declaredLanguage ?? fallbackLanguage;
         try {
           if (highlightEnabled && configuredLanguage && hljs.getLanguage(configuredLanguage)) {
-            const result = hljs.highlight(code, {
+            const result = hljs.highlight(renderedCode, {
               language: configuredLanguage,
               ignoreIllegals: true
             });
             return renderCodeBlock(result.value, {
               classes: buildCodeClassName(configuredLanguage),
-              language: configuredLanguage
+              code: sourceCode,
+              declaredLanguage,
+              highlighted: true,
+              language: configuredLanguage,
+              renderHeader: options.renderHeader
             });
           }
           if (highlightEnabled && options.autoDetect) {
-            const result = hljs.highlightAuto(code, getAutoDetectLanguages(options));
+            const result = hljs.highlightAuto(renderedCode, getAutoDetectLanguages(options));
             if (result.language) {
               return renderCodeBlock(result.value, {
                 classes: buildCodeClassName(result.language),
-                language: result.language
+                code: sourceCode,
+                declaredLanguage,
+                highlighted: true,
+                language: result.language,
+                renderHeader: options.renderHeader
               });
             }
           }
         } catch {
         }
-        const plainCode = token.escaped ? code : escapeHtml(code);
+        const plainCode = token.escaped ? renderedCode : escapeHtml(renderedCode);
         const className = configuredLanguage ? `language-${escapeHtml(configuredLanguage)}` : void 0;
         return renderCodeBlock(plainCode, {
           classes: className,
-          language: configuredLanguage
+          code: sourceCode,
+          declaredLanguage,
+          highlighted: false,
+          language: configuredLanguage,
+          renderHeader: options.renderHeader
         });
       }
     }

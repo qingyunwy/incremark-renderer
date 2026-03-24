@@ -50,6 +50,37 @@ test('renderMarkdownToString can disable syntax highlighting', () => {
   assert.doesNotMatch(html, /class="hljs/);
 });
 
+test('renderMarkdownToString can customize code block header actions', () => {
+  const html = renderMarkdownToString('```ts\nconst value = 1;\n```', {
+    highlight: {
+      renderHeader: ({ code, defaultHeaderContent, declaredLanguage, highlighted, language }) =>
+        `${defaultHeaderContent}<button type="button" class="copy-button" data-code="${encodeURIComponent(code)}" data-declared-language="${declaredLanguage}" data-highlighted="${String(highlighted)}" data-language="${language}">Copy</button>`,
+    },
+  });
+
+  assert.match(html, /<div class="incremark-code-block-header">/);
+  assert.match(html, /incremark-code-language">ts<\/span>/);
+  assert.match(html, /class="copy-button"/);
+  assert.match(html, /data-code="const%20value%20%3D%201%3B"/);
+  assert.match(html, /data-declared-language="ts"/);
+  assert.match(html, /data-highlighted="true"/);
+});
+
+test('renderMarkdownToString can render custom code block header without a language badge', () => {
+  const html = renderMarkdownToString('```\nplain text\n```', {
+    highlight: {
+      renderHeader: ({ defaultHeaderContent, language }) => {
+        assert.equal(defaultHeaderContent, '');
+        assert.equal(language, undefined);
+        return '<button type="button" class="plain-copy-button">Copy</button>';
+      },
+    },
+  });
+
+  assert.match(html, /<div class="incremark-code-block-header"><button type="button" class="plain-copy-button">Copy<\/button><\/div>/);
+  assert.doesNotMatch(html, /incremark-code-language/);
+});
+
 test('StreamMarkdownRenderer.setMarkdown replaces current state with full content', () => {
   const renderer = new StreamMarkdownRenderer();
   renderer.append('# Draft');

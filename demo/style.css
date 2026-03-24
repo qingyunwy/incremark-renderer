@@ -255,8 +255,8 @@ button:hover {
 
 .preview .incremark-code-block-header {
   display: flex;
-  justify-content: flex-end;
   align-items: center;
+  gap: 0.65rem;
   min-height: 2.2rem;
   padding: 0.5rem 0.8rem 0;
   background:
@@ -267,6 +267,7 @@ button:hover {
 .preview .incremark-code-language {
   display: inline-flex;
   align-items: center;
+  margin-right: auto;
   padding: 0.16rem 0.5rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
@@ -276,6 +277,23 @@ button:hover {
   font-size: 0.72rem;
   letter-spacing: 0.04em;
   text-transform: lowercase;
+}
+
+.preview .incremark-code-action {
+  min-width: 0;
+  padding: 0.24rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7f2ea;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  box-shadow: none;
+}
+
+.preview .incremark-code-action:hover {
+  transform: none;
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .preview .incremark-code-block pre {

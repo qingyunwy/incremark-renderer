@@ -204,6 +204,32 @@ const renderer = new StreamMarkdownRenderer({
 });
 ```
 
+Customize the `incremark-code-block-header` content if you want to add copy
+buttons or other actions:
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    renderHeader: ({ code, defaultHeaderContent }) => {
+      const encoded = encodeURIComponent(code);
+      return `${defaultHeaderContent}<button type="button" class="copy-button" data-copy-code="${encoded}">Copy</button>`;
+    },
+  },
+});
+
+root.addEventListener('click', async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) {
+    return;
+  }
+  const encoded = target.dataset.copyCode;
+  if (!encoded) {
+    return;
+  }
+  await navigator.clipboard.writeText(decodeURIComponent(encoded));
+});
+```
+
 ## Typewriter Playback
 
 ```ts

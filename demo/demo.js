@@ -89,7 +89,14 @@ let renderMode = 'stream';
 
 function createRenderer() {
   previewRoot.innerHTML = '';
-  return new IncrementalDomRenderer(previewRoot);
+  return new IncrementalDomRenderer(previewRoot, {
+    highlight: {
+      renderHeader: ({ code, defaultHeaderContent }) => {
+        const encodedCode = encodeURIComponent(code);
+        return `${defaultHeaderContent}<button type="button" class="incremark-code-action" data-copy-code="${encodedCode}">Copy</button>`;
+      },
+    },
+  });
 }
 
 function createTypewriterCursor() {
@@ -325,6 +332,33 @@ function finalizeDemo() {
   syncStatus(patches);
   typewriterCursor.hide();
 }
+
+previewRoot.addEventListener('click', async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const encodedCode = target.dataset.copyCode;
+  if (!encodedCode) {
+    return;
+  }
+
+  const previousLabel = target.textContent ?? 'Copy';
+
+  try {
+    await navigator.clipboard.writeText(decodeURIComponent(encodedCode));
+    target.textContent = 'Copied';
+  } catch {
+    target.textContent = 'Failed';
+  }
+
+  window.setTimeout(() => {
+    if (target.isConnected) {
+      target.textContent = previousLabel;
+    }
+  }, 1200);
+});
 
 resetButton.addEventListener('click', resetDemo);
 stepButton.addEventListener('click', () => {
