@@ -1,5 +1,50 @@
+// src/container-syntax.ts
+var FENCE_PATTERN = /^ {0,3}(`{3,}|~{3,})(.*)$/u;
+var CONTAINER_PATTERN = /^ {0,3}(:{3,})([^\n]*)$/u;
+function stripLineEnding(line) {
+  return line.endsWith("\n") ? line.slice(0, -1) : line;
+}
+function getFenceStart(line) {
+  const match = stripLineEnding(line).match(FENCE_PATTERN);
+  const fence = match?.[1];
+  if (!fence) {
+    return null;
+  }
+  return {
+    marker: fence[0] ?? "`",
+    size: fence.length
+  };
+}
+function isFenceEnd(line, state) {
+  const trimmed = stripLineEnding(line);
+  const pattern = new RegExp(`^ {0,3}${state.marker}{${state.size},}\\s*$`, "u");
+  return pattern.test(trimmed);
+}
+function getContainerOpen(line) {
+  const match = stripLineEnding(line).match(CONTAINER_PATTERN);
+  const marker = match?.[1];
+  const rawInfo = match?.[2]?.trim();
+  if (!marker || !rawInfo) {
+    return null;
+  }
+  const [type, ...titleParts] = rawInfo.split(/\s+/u);
+  if (!type) {
+    return null;
+  }
+  const title = titleParts.join(" ").trim() || void 0;
+  return {
+    info: rawInfo,
+    type,
+    title,
+    size: marker.length
+  };
+}
+function isContainerClose(line, size) {
+  const pattern = new RegExp(`^ {0,3}:{${size},}\\s*$`, "u");
+  return pattern.test(stripLineEnding(line));
+}
+
 // src/block-boundary.ts
-var FENCE_PATTERN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 var SINGLE_LINE_BLOCK_PATTERN = /^(#{1,6}\s+.+| {0,3}([-*_])(?:\s*\2){2,}\s*)$/;
 var SETEXT_UNDERLINE_PATTERN = /^ {0,3}(=+|-+)\s*$/;
 function getCompletedLines(input) {
@@ -16,27 +61,8 @@ function getCompletedLines(input) {
     rest: input.slice(start)
   };
 }
-function stripLineEnding(line) {
-  return line.endsWith("\n") ? line.slice(0, -1) : line;
-}
 function isBlankLine(line) {
   return /^\s*$/.test(stripLineEnding(line));
-}
-function getFenceStart(line) {
-  const match = stripLineEnding(line).match(FENCE_PATTERN);
-  const fence = match?.[1];
-  if (!fence) {
-    return null;
-  }
-  return {
-    marker: fence[0] ?? "`",
-    size: fence.length
-  };
-}
-function isFenceEnd(line, state) {
-  const trimmed = stripLineEnding(line);
-  const pattern = new RegExp(`^ {0,3}${state.marker}{${state.size},}\\s*$`);
-  return pattern.test(trimmed);
 }
 function classifyBufferedBlock(lines) {
   const firstLine = lines[0];
@@ -66,13 +92,38 @@ function extractStableBlocks(input, finalize = false) {
   const stableBlocks = [];
   const current = [];
   let fenceState = null;
+  const containerStack = [];
   for (const line of lines) {
     if (fenceState) {
       current.push(line);
       if (isFenceEnd(line, fenceState)) {
-        flushCurrentBlock(stableBlocks, current);
-        current.length = 0;
         fenceState = null;
+        if (containerStack.length === 0) {
+          flushCurrentBlock(stableBlocks, current);
+          current.length = 0;
+        }
+      }
+      continue;
+    }
+    if (containerStack.length > 0) {
+      current.push(line);
+      const start = getFenceStart(line);
+      if (start) {
+        fenceState = start;
+        continue;
+      }
+      const nestedOpen = getContainerOpen(line);
+      if (nestedOpen) {
+        containerStack.push(nestedOpen.size);
+        continue;
+      }
+      const currentSize = containerStack[containerStack.length - 1];
+      if (currentSize && isContainerClose(line, currentSize)) {
+        containerStack.pop();
+        if (containerStack.length === 0) {
+          flushCurrentBlock(stableBlocks, current);
+          current.length = 0;
+        }
       }
       continue;
     }
@@ -84,6 +135,12 @@ function extractStableBlocks(input, finalize = false) {
       if (start) {
         current.push(line);
         fenceState = start;
+        continue;
+      }
+      const containerOpen = getContainerOpen(line);
+      if (containerOpen) {
+        current.push(line);
+        containerStack.push(containerOpen.size);
         continue;
       }
       current.push(line);
@@ -201,6 +258,137 @@ function diffAst(previous, next) {
   return patches;
 }
 
+// src/container.ts
+var CONTAINER_START_RE = /(^|\n) {0,3}:{3,}(?:(?=[^\s:\n])|[ \t]+(?=\S))/u;
+var HTML_ESCAPE_RE = /[&<>"']/g;
+var HTML_ESCAPES = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;"
+};
+function escapeHtml(value) {
+  return value.replace(HTML_ESCAPE_RE, (character) => HTML_ESCAPES[character] ?? character);
+}
+function sanitizeClassNameSegment(value) {
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9_-]+/gu, "-");
+  return normalized.replace(/^-+|-+$/gu, "") || "default";
+}
+function readLine(src, start) {
+  const newline = src.indexOf("\n", start);
+  if (newline === -1) {
+    return {
+      line: src.slice(start),
+      next: src.length
+    };
+  }
+  return {
+    line: src.slice(start, newline + 1),
+    next: newline + 1
+  };
+}
+function buildDefaultClassName(type) {
+  return `incremark-container incremark-container-${sanitizeClassNameSegment(type)}`;
+}
+function renderDefaultContainer(context) {
+  const titleHtml = context.title ? `<div class="incremark-container-title">${escapeHtml(context.title)}</div>` : "";
+  return `<div class="${context.defaultClassName}" data-container-type="${escapeHtml(context.type)}">${titleHtml}<div class="incremark-container-content">${context.innerHtml}</div></div>
+`;
+}
+function scanContainer(src) {
+  const firstLine = readLine(src, 0);
+  const opening = getContainerOpen(firstLine.line);
+  if (!opening) {
+    return null;
+  }
+  const containerStack = [opening.size];
+  const contentStart = firstLine.next;
+  let cursor = firstLine.next;
+  let fenceState = null;
+  while (cursor < src.length) {
+    const { line, next } = readLine(src, cursor);
+    if (fenceState) {
+      if (isFenceEnd(line, fenceState)) {
+        fenceState = null;
+      }
+      cursor = next;
+      continue;
+    }
+    const fence = getFenceStart(line);
+    if (fence) {
+      fenceState = fence;
+      cursor = next;
+      continue;
+    }
+    const nestedOpen = getContainerOpen(line);
+    if (nestedOpen) {
+      containerStack.push(nestedOpen.size);
+      cursor = next;
+      continue;
+    }
+    const currentSize = containerStack[containerStack.length - 1];
+    if (currentSize && isContainerClose(line, currentSize)) {
+      containerStack.pop();
+      if (containerStack.length === 0) {
+        return {
+          type: "customContainer",
+          raw: src.slice(0, next),
+          text: src.slice(contentStart, cursor),
+          containerType: opening.type,
+          info: opening.info,
+          title: opening.title
+        };
+      }
+    }
+    cursor = next;
+  }
+  return null;
+}
+function createContainerExtension(options = {}) {
+  return {
+    extensions: [
+      {
+        name: "customContainer",
+        level: "block",
+        start(src) {
+          const match = src.match(CONTAINER_START_RE);
+          if (!match) {
+            return;
+          }
+          return match.index === void 0 ? void 0 : match.index + (match[1]?.length ?? 0);
+        },
+        tokenizer(src) {
+          const token = scanContainer(src);
+          if (!token) {
+            return;
+          }
+          return {
+            ...token,
+            tokens: this.lexer.blockTokens(token.text, [])
+          };
+        },
+        renderer(token) {
+          const container = token;
+          const innerHtml = this.parser.parse(container.tokens);
+          const context = {
+            type: container.containerType,
+            info: container.info,
+            title: container.title,
+            raw: container.raw,
+            text: container.text,
+            innerHtml,
+            defaultClassName: buildDefaultClassName(container.containerType)
+          };
+          const customHtml = options.render?.(context);
+          return customHtml === null || customHtml === void 0 ? renderDefaultContainer(context) : customHtml;
+        },
+        childTokens: ["tokens"]
+      }
+    ]
+  };
+}
+
 // src/renderers.ts
 var DefaultBlockRenderer = class {
   marked;
@@ -222,16 +410,16 @@ import { Marked } from "marked";
 import hljs from "highlight.js";
 var TRAILING_NEWLINE_RE = /\n$/u;
 var INFO_LANGUAGE_RE = /^\S+/u;
-var HTML_ESCAPE_RE = /[&<>"']/g;
-var HTML_ESCAPES = {
+var HTML_ESCAPE_RE2 = /[&<>"']/g;
+var HTML_ESCAPES2 = {
   "&": "&amp;",
   "<": "&lt;",
   ">": "&gt;",
   '"': "&quot;",
   "'": "&#39;"
 };
-function escapeHtml(value) {
-  return value.replace(HTML_ESCAPE_RE, (character) => HTML_ESCAPES[character] ?? character);
+function escapeHtml2(value) {
+  return value.replace(HTML_ESCAPE_RE2, (character) => HTML_ESCAPES2[character] ?? character);
 }
 function normalizeCodeText(value) {
   return `${value.replace(TRAILING_NEWLINE_RE, "")}
@@ -245,19 +433,19 @@ function buildCodeClassName(language) {
   if (language) {
     classes.push(`language-${language}`);
   }
-  return classes.map((value) => escapeHtml(value)).join(" ");
+  return classes.map((value) => escapeHtml2(value)).join(" ");
 }
 function buildWrapperAttributes(language) {
   if (!language) {
     return "";
   }
-  return ` data-language="${escapeHtml(language)}"`;
+  return ` data-language="${escapeHtml2(language)}"`;
 }
 function renderLanguageBadge(language) {
   if (!language) {
     return "";
   }
-  return `<span class="incremark-code-language">${escapeHtml(language)}</span>`;
+  return `<span class="incremark-code-language">${escapeHtml2(language)}</span>`;
 }
 function renderCodeBlockHeader(options) {
   const context = {
@@ -323,8 +511,8 @@ function createHighlightExtension(options = {}, runtime = {}) {
           }
         } catch {
         }
-        const plainCode = token.escaped ? renderedCode : escapeHtml(renderedCode);
-        const className = configuredLanguage ? `language-${escapeHtml(configuredLanguage)}` : void 0;
+        const plainCode = token.escaped ? renderedCode : escapeHtml2(renderedCode);
+        const className = configuredLanguage ? `language-${escapeHtml2(configuredLanguage)}` : void 0;
         return renderCodeBlock(plainCode, {
           classes: className,
           code: sourceCode,
@@ -346,7 +534,7 @@ var BLOCK_BRACKET_CLOSE = "\\]";
 var INLINE_DOLLAR = "$";
 var INLINE_PAREN_OPEN = "\\(";
 var INLINE_PAREN_CLOSE = "\\)";
-function escapeHtml2(value) {
+function escapeHtml3(value) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 function readDelimited(src, open, close, allowNewline) {
@@ -389,7 +577,7 @@ function renderMath(token, options) {
     }
     return `<span class="incremark-math incremark-math-inline">${markup}</span>`;
   } catch (error) {
-    return escapeHtml2(token.raw);
+    return escapeHtml3(token.raw);
   }
 }
 function createMathExtension(options) {
@@ -499,9 +687,11 @@ var StreamMarkdownRenderer = class {
   constructor(options = {}) {
     this.mathEnabled = options.math !== false;
     const mathOptions = options.math === false ? void 0 : options.math;
+    const containerOptions = options.container === false ? void 0 : options.container ?? {};
     const highlightOptions = options.highlight === false ? {} : options.highlight ?? {};
     const extensions = [
       ...this.mathEnabled ? [createMathExtension(mathOptions)] : [],
+      ...containerOptions ? [createContainerExtension(containerOptions)] : [],
       createHighlightExtension(highlightOptions, {
         highlightEnabled: options.highlight !== false
       })
@@ -1279,6 +1469,7 @@ export {
   StreamMarkdownRenderer,
   StreamingMarkdownTypewriter,
   TypewriterCursorController,
+  createContainerExtension,
   createHighlightExtension,
   createMathExtension,
   diffAst,

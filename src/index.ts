@@ -1,5 +1,6 @@
 export { extractStableBlocks } from './block-boundary.js';
 export { diffAst, digestTokens } from './ast-diff.js';
+export { createContainerExtension } from './container.js';
 export { IncrementalDomRenderer } from './dom-renderer.js';
 export { renderMarkdown, renderMarkdownToString } from './full-render.js';
 export { createHighlightExtension } from './highlight.js';
@@ -12,6 +13,10 @@ export type {
   AstNodePatch,
   BlockExtractionResult,
   BlockRenderer,
+  ContainerOptions,
+  ContainerRenderContext,
+  ContainerRenderer,
+  ContainerToken,
   CodeBlockHeaderRenderContext,
   CodeBlockHeaderRenderer,
   CodeHighlightOptions,

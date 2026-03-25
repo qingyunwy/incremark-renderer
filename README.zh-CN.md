@@ -209,6 +209,48 @@ const renderer = new StreamMarkdownRenderer({
 });
 ```
 
+## 自定义容器
+
+现在默认支持 `:::` 容器语法，并会把它解析成独立的块级 token。
+起始行可以写容器类型和可选标题，容器内部仍然可以继续嵌套 Markdown、代码围栏和其他已支持语法。
+
+```ts
+import { renderMarkdownToString } from 'incremark-renderer';
+
+const html = renderMarkdownToString(`:::note 快速开始
+这里可以写 **容器内容**。
+:::`);
+```
+
+默认输出结构会带上：
+
+- `.incremark-container`
+- `.incremark-container-{type}`
+- `[data-container-type="{type}"]`
+- `.incremark-container-title`
+- `.incremark-container-content`
+
+如果你希望自己控制外层结构，可以这样自定义渲染：
+
+```ts
+import { StreamMarkdownRenderer } from 'incremark-renderer';
+
+const renderer = new StreamMarkdownRenderer({
+  container: {
+    render: ({ type, title, innerHtml }) =>
+      `<aside class="callout callout-${type}">${title ? `<h3>${title}</h3>` : ''}${innerHtml}</aside>`,
+  },
+});
+```
+
+如果你不希望启用 `:::` 容器解析，也可以关闭：
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  container: false,
+});
+```
+
 ## 代码高亮
 
 带语言标记的 fenced code block 默认会启用语法高亮。

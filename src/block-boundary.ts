@@ -1,14 +1,16 @@
 import type { BlockExtractionResult } from './types.js';
+import type { FenceState } from './container-syntax.js';
+import {
+  getContainerOpen,
+  getFenceStart,
+  isContainerClose,
+  isFenceEnd,
+  stripLineEnding,
+} from './container-syntax.js';
 
-const FENCE_PATTERN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 const SINGLE_LINE_BLOCK_PATTERN =
   /^(#{1,6}\s+.+| {0,3}([-*_])(?:\s*\2){2,}\s*)$/;
 const SETEXT_UNDERLINE_PATTERN = /^ {0,3}(=+|-+)\s*$/;
-
-interface FenceState {
-  marker: string;
-  size: number;
-}
 
 // Streaming input often ends mid-line. We only treat complete lines as candidates
 // for stabilization and leave the last unterminated fragment in `rest`.
@@ -29,31 +31,8 @@ function getCompletedLines(input: string): { lines: string[]; rest: string } {
   };
 }
 
-function stripLineEnding(line: string): string {
-  return line.endsWith('\n') ? line.slice(0, -1) : line;
-}
-
 function isBlankLine(line: string): boolean {
   return /^\s*$/.test(stripLineEnding(line));
-}
-
-function getFenceStart(line: string): FenceState | null {
-  const match = stripLineEnding(line).match(FENCE_PATTERN);
-  const fence = match?.[1];
-  if (!fence) {
-    return null;
-  }
-
-  return {
-    marker: fence[0] ?? '`',
-    size: fence.length,
-  };
-}
-
-function isFenceEnd(line: string, state: FenceState): boolean {
-  const trimmed = stripLineEnding(line);
-  const pattern = new RegExp(`^ {0,3}${state.marker}{${state.size},}\\s*$`);
-  return pattern.test(trimmed);
 }
 
 // Only eagerly stabilize blocks with very explicit endings. Paragraphs, lists,
@@ -93,6 +72,7 @@ export function extractStableBlocks(input: string, finalize = false): BlockExtra
   const stableBlocks: string[] = [];
   const current: string[] = [];
   let fenceState: FenceState | null = null;
+  const containerStack: number[] = [];
 
   for (const line of lines) {
     // Once inside a fenced block, every completed line belongs to the same unstable
@@ -100,9 +80,37 @@ export function extractStableBlocks(input: string, finalize = false): BlockExtra
     if (fenceState) {
       current.push(line);
       if (isFenceEnd(line, fenceState)) {
-        flushCurrentBlock(stableBlocks, current);
-        current.length = 0;
         fenceState = null;
+        if (containerStack.length === 0) {
+          flushCurrentBlock(stableBlocks, current);
+          current.length = 0;
+        }
+      }
+      continue;
+    }
+
+    if (containerStack.length > 0) {
+      current.push(line);
+
+      const start = getFenceStart(line);
+      if (start) {
+        fenceState = start;
+        continue;
+      }
+
+      const nestedOpen = getContainerOpen(line);
+      if (nestedOpen) {
+        containerStack.push(nestedOpen.size);
+        continue;
+      }
+
+      const currentSize = containerStack[containerStack.length - 1];
+      if (currentSize && isContainerClose(line, currentSize)) {
+        containerStack.pop();
+        if (containerStack.length === 0) {
+          flushCurrentBlock(stableBlocks, current);
+          current.length = 0;
+        }
       }
       continue;
     }
@@ -118,6 +126,13 @@ export function extractStableBlocks(input: string, finalize = false): BlockExtra
       if (start) {
         current.push(line);
         fenceState = start;
+        continue;
+      }
+
+      const containerOpen = getContainerOpen(line);
+      if (containerOpen) {
+        current.push(line);
+        containerStack.push(containerOpen.size);
         continue;
       }
 

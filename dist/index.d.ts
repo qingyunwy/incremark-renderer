@@ -1,5 +1,5 @@
 import { KatexOptions } from 'katex';
-import { MarkedOptions, MarkedExtension, Marked } from 'marked';
+import { Tokens, Token, MarkedOptions, MarkedExtension, Marked } from 'marked';
 
 interface StableBlock {
     key: string;
@@ -42,6 +42,27 @@ interface CodeBlockHeaderRenderContext {
     defaultHeaderContent: string;
 }
 type CodeBlockHeaderRenderer = (context: CodeBlockHeaderRenderContext) => string | null | undefined;
+interface ContainerToken extends Tokens.Generic {
+    type: 'customContainer';
+    text: string;
+    containerType: string;
+    info: string;
+    title?: string;
+    tokens: Token[];
+}
+interface ContainerRenderContext {
+    type: string;
+    info: string;
+    title?: string;
+    raw: string;
+    text: string;
+    innerHtml: string;
+    defaultClassName: string;
+}
+type ContainerRenderer = (context: ContainerRenderContext) => string | null | undefined;
+interface ContainerOptions {
+    render?: ContainerRenderer;
+}
 interface CodeHighlightOptions {
     autoDetect?: boolean;
     defaultLanguage?: string;
@@ -50,6 +71,7 @@ interface CodeHighlightOptions {
 }
 interface StreamMarkdownOptions {
     marked?: MarkedOptions;
+    container?: ContainerOptions | false;
     math?: MathRenderOptions | false;
     highlight?: CodeHighlightOptions | false;
     renderer?: BlockRenderer;
@@ -110,6 +132,8 @@ declare function extractStableBlocks(input: string, finalize?: boolean): BlockEx
 
 declare function digestTokens(tokens: TokensList): string;
 declare function diffAst(previous: TokensList, next: TokensList): AstNodePatch[];
+
+declare function createContainerExtension(options?: ContainerOptions): MarkedExtension<string, string>;
 
 declare class IncrementalDomRenderer {
     private readonly engine;
@@ -222,4 +246,4 @@ declare class StreamingMarkdownTypewriter extends BaseMarkdownTypewriter {
     protected isInputClosed(): boolean;
 }
 
-export { type AstNodePatch, type BlockExtractionResult, type BlockRenderer, type CodeBlockHeaderRenderContext, type CodeBlockHeaderRenderer, type CodeHighlightOptions, DefaultBlockRenderer, type FullRenderResult, IncrementalDomRenderer, MarkdownTypewriter, type MathRenderOptions, type RenderPatch, type StableBlock, type StreamMarkdownOptions, type StreamMarkdownPlugin, StreamMarkdownRenderer, type StreamRendererSnapshot, StreamingMarkdownTypewriter, type TokensList, type TypewriterChunkMeta, TypewriterCursorController, type TypewriterCursorOptions, type TypewriterEventMeta, type TypewriterOptions, type TypewriterState, createHighlightExtension, createMathExtension, diffAst, digestTokens, extractStableBlocks, renderMarkdown, renderMarkdownToString, wrapBlockHtml };
+export { type AstNodePatch, type BlockExtractionResult, type BlockRenderer, type CodeBlockHeaderRenderContext, type CodeBlockHeaderRenderer, type CodeHighlightOptions, type ContainerOptions, type ContainerRenderContext, type ContainerRenderer, type ContainerToken, DefaultBlockRenderer, type FullRenderResult, IncrementalDomRenderer, MarkdownTypewriter, type MathRenderOptions, type RenderPatch, type StableBlock, type StreamMarkdownOptions, type StreamMarkdownPlugin, StreamMarkdownRenderer, type StreamRendererSnapshot, StreamingMarkdownTypewriter, type TokensList, type TypewriterChunkMeta, TypewriterCursorController, type TypewriterCursorOptions, type TypewriterEventMeta, type TypewriterOptions, type TypewriterState, createContainerExtension, createHighlightExtension, createMathExtension, diffAst, digestTokens, extractStableBlocks, renderMarkdown, renderMarkdownToString, wrapBlockHtml };

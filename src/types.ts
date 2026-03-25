@@ -1,5 +1,5 @@
 import type { KatexOptions } from 'katex';
-import type { MarkedOptions } from 'marked';
+import type { MarkedOptions, Token, Tokens } from 'marked';
 
 export interface StableBlock {
   key: string;
@@ -52,6 +52,33 @@ export type CodeBlockHeaderRenderer = (
   context: CodeBlockHeaderRenderContext,
 ) => string | null | undefined;
 
+export interface ContainerToken extends Tokens.Generic {
+  type: 'customContainer';
+  text: string;
+  containerType: string;
+  info: string;
+  title?: string;
+  tokens: Token[];
+}
+
+export interface ContainerRenderContext {
+  type: string;
+  info: string;
+  title?: string;
+  raw: string;
+  text: string;
+  innerHtml: string;
+  defaultClassName: string;
+}
+
+export type ContainerRenderer = (
+  context: ContainerRenderContext,
+) => string | null | undefined;
+
+export interface ContainerOptions {
+  render?: ContainerRenderer;
+}
+
 export interface CodeHighlightOptions {
   autoDetect?: boolean;
   defaultLanguage?: string;
@@ -61,6 +88,7 @@ export interface CodeHighlightOptions {
 
 export interface StreamMarkdownOptions {
   marked?: MarkedOptions;
+  container?: ContainerOptions | false;
   math?: MathRenderOptions | false;
   highlight?: CodeHighlightOptions | false;
   renderer?: BlockRenderer;

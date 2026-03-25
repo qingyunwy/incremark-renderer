@@ -16,6 +16,25 @@ const sampleMarkdown = `# Incremark Renderer
 - 当前尾块允许持续重解析
 - DOM 仅替换变更块
 
+## Custom Containers
+
+:::note Demo Callout
+这个区域在 demo 页面里通过 \`container.render\` 自定义成了 callout 结构。
+
+你可以把类型改成 \`tip\`、\`warning\` 或 \`success\`，看看预览区域的样式变化。
+:::
+
+:::warning 流式稳定性
+- \`:::\` 没闭合之前会一直留在 tail
+- 闭合后才会稳定成独立块
+
+\`\`\`md
+:::tip Nested sample
+content
+:::
+\`\`\`
+:::
+
 > 下面追加一个代码块，验证围栏闭合前不会过早稳定。
 
 \`\`\`ts
@@ -87,9 +106,36 @@ let typewriterFeedCursor = 0;
 let typewriterFeedTimer = null;
 let renderMode = 'stream';
 
+function escapeHtml(value) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function sanitizeClassNameSegment(value) {
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  return normalized.replace(/^-+|-+$/g, '') || 'default';
+}
+
+function renderDemoContainer({ type, title, innerHtml }) {
+  console.log("renderDemoContainer", type, title, innerHtml)
+  const safeType = escapeHtml(type);
+  const safeTitle = title
+    ? `<strong class="demo-callout-title">${escapeHtml(title)}</strong>`
+    : '';
+
+  return `<aside class="demo-callout demo-callout-${sanitizeClassNameSegment(type)}" data-demo-callout="${safeType}"><div class="demo-callout-head"><span class="demo-callout-chip">${safeType}</span>${safeTitle}</div><div class="demo-callout-body">${innerHtml}</div></aside>`;
+}
+
 function createRenderer() {
   previewRoot.innerHTML = '';
   return new IncrementalDomRenderer(previewRoot, {
+    container: {
+      render: renderDemoContainer,
+    },
     highlight: {
       renderHeader: ({ code, defaultHeaderContent }) => {
         const encodedCode = encodeURIComponent(code);

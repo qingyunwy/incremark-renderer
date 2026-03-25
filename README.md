@@ -171,6 +171,49 @@ const renderer = new StreamMarkdownRenderer({
 });
 ```
 
+## Custom Containers
+
+`:::` containers are supported out of the box and parsed as dedicated block tokens.
+The opening line accepts a container type and an optional title, while the body can
+contain nested Markdown, fenced code blocks, and other supported syntax.
+
+```ts
+import { renderMarkdownToString } from 'incremark-renderer';
+
+const html = renderMarkdownToString(`:::note Quick Start
+Use **containers** here.
+:::`);
+```
+
+By default the renderer outputs:
+
+- `.incremark-container`
+- `.incremark-container-{type}`
+- `[data-container-type="{type}"]`
+- `.incremark-container-title`
+- `.incremark-container-content`
+
+Customize the wrapper markup if you want your own callout structure:
+
+```ts
+import { StreamMarkdownRenderer } from 'incremark-renderer';
+
+const renderer = new StreamMarkdownRenderer({
+  container: {
+    render: ({ type, title, innerHtml }) =>
+      `<aside class="callout callout-${type}">${title ? `<h3>${title}</h3>` : ''}${innerHtml}</aside>`,
+  },
+});
+```
+
+Disable container parsing entirely if needed:
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  container: false,
+});
+```
+
 ## Code Highlighting
 
 Fenced code blocks with an explicit language info string are highlighted by default.

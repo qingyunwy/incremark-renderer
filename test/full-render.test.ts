@@ -13,6 +13,34 @@ test('renderMarkdownToString fully renders markdown in one call', () => {
   assert.match(html, /<p>Saved message<\/p>/);
 });
 
+test('renderMarkdownToString renders ::: custom containers with nested markdown', () => {
+  const html = renderMarkdownToString(':::note Quick Start\nUse **containers** here.\n:::');
+
+  assert.match(html, /class="incremark-container incremark-container-note"/);
+  assert.match(html, /data-container-type="note"/);
+  assert.match(html, /<div class="incremark-container-title">Quick Start<\/div>/);
+  assert.match(html, /<div class="incremark-container-content"><p>Use <strong>containers<\/strong> here\.<\/p>/);
+});
+
+test('renderMarkdownToString supports custom ::: container rendering', () => {
+  const html = renderMarkdownToString(':::tip Quick Start\nInstall first.\n:::', {
+    container: {
+      render: ({ type, title, innerHtml }) =>
+        `<aside class="callout" data-kind="${type}">${title ? `<h2>${title}</h2>` : ''}${innerHtml}</aside>`,
+    },
+  });
+
+  assert.match(html, /<aside class="callout" data-kind="tip"><h2>Quick Start<\/h2><p>Install first\.<\/p>/);
+  assert.doesNotMatch(html, /incremark-container-content/);
+});
+
+test('renderMarkdownToString ignores ::: markers inside fenced code within containers', () => {
+  const html = renderMarkdownToString(':::note Example\n```md\n:::\n```\n:::');
+
+  assert.match(html, /class="incremark-container incremark-container-note"/);
+  assert.match(html, /<code[^>]*>:::\n<\/code>/);
+});
+
 test('renderMarkdown returns blocks and snapshot for full rendering', () => {
   const result = renderMarkdown('## Title\n\nBody');
   assert.match(result.html, /<h2>Title<\/h2>/);

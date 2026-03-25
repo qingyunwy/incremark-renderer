@@ -2,6 +2,7 @@ import { Marked } from 'marked';
 
 import { diffAst, digestTokens } from './ast-diff.js';
 import { extractStableBlocks } from './block-boundary.js';
+import { createContainerExtension } from './container.js';
 import { createHighlightExtension } from './highlight.js';
 import { createMathExtension } from './math.js';
 import { DefaultBlockRenderer } from './renderers.js';
@@ -38,9 +39,11 @@ export class StreamMarkdownRenderer {
   public constructor(options: StreamMarkdownOptions = {}) {
     this.mathEnabled = options.math !== false;
     const mathOptions = options.math === false ? undefined : options.math;
+    const containerOptions = options.container === false ? undefined : options.container ?? {};
     const highlightOptions = options.highlight === false ? {} : options.highlight ?? {};
     const extensions = [
       ...(this.mathEnabled ? [createMathExtension(mathOptions)] : []),
+      ...(containerOptions ? [createContainerExtension(containerOptions)] : []),
       createHighlightExtension(highlightOptions, {
         highlightEnabled: options.highlight !== false,
       }),
