@@ -34,6 +34,26 @@ test('renderMarkdownToString supports custom ::: container rendering', () => {
   assert.doesNotMatch(html, /incremark-container-content/);
 });
 
+test('renderMarkdownToString exposes closed=true for completed ::: containers', () => {
+  const html = renderMarkdownToString(':::tip\nReady\n:::', {
+    container: {
+      render: ({ closed, innerHtml }) => `<aside data-closed="${String(closed)}">${innerHtml}</aside>`,
+    },
+  });
+
+  assert.match(html, /<aside data-closed="true"><p>Ready<\/p>/);
+});
+
+test('renderMarkdownToString exposes closed=false for unfinished ::: containers', () => {
+  const html = renderMarkdownToString(':::tip\nDraft', {
+    container: {
+      render: ({ closed, innerHtml }) => `<aside data-closed="${String(closed)}">${innerHtml}</aside>`,
+    },
+  });
+
+  assert.match(html, /<aside data-closed="false"><p>Draft<\/p>/);
+});
+
 test('renderMarkdownToString ignores ::: markers inside fenced code within containers', () => {
   const html = renderMarkdownToString(':::note Example\n```md\n:::\n```\n:::');
 
@@ -100,6 +120,27 @@ test('renderMarkdownToString can customize code block header actions', () => {
   assert.match(html, /data-code="const%20value%20%3D%201%3B"/);
   assert.match(html, /data-declared-language="ts"/);
   assert.match(html, /data-highlighted="true"/);
+});
+
+test('renderMarkdownToString exposes closed=true to code block header renderers', () => {
+  const html = renderMarkdownToString('```ts\nconst value = 1;\n```', {
+    highlight: {
+      renderHeader: ({ closed }) => `<span class="closed-flag">${String(closed)}</span>`,
+    },
+  });
+
+  assert.match(html, /<span class="closed-flag">true<\/span>/);
+});
+
+test('renderMarkdownToString exposes closed=false to unfinished code block renderers', () => {
+  const html = renderMarkdownToString('```ts\nconst value = 1;\n', {
+    highlight: {
+      renderBlock: ({ closed, bodyHtml }) =>
+        `<div class="code-shell" data-closed="${String(closed)}"><pre><code>${bodyHtml}</code></pre></div>`,
+    },
+  });
+
+  assert.match(html, /<div class="code-shell" data-closed="false"><pre><code>/);
 });
 
 test('renderMarkdownToString can render custom code block header without a language badge', () => {

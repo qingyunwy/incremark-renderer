@@ -51,6 +51,7 @@ export interface CodeBlockHeaderRenderContext {
   language?: string;
   declaredLanguage?: string;
   highlighted: boolean;
+  closed: boolean;
   defaultHeaderContent: string;
 }
 
@@ -63,6 +64,7 @@ export interface CodeBlockRenderContext {
   language?: string;
   declaredLanguage?: string;
   highlighted: boolean;
+  closed: boolean;
   defaultHeaderContent: string;
   headerHtml: string;
   bodyHtml: string;
@@ -74,12 +76,17 @@ export type CodeBlockRenderer = (
   context: CodeBlockRenderContext,
 ) => string | null | undefined;
 
+export interface CodeBlockToken extends Tokens.Code {
+  closed: boolean;
+}
+
 export interface ContainerToken extends Tokens.Generic {
   type: 'customContainer';
   text: string;
   containerType: string;
   info: string;
   title?: string;
+  closed: boolean;
   tokens: Token[];
 }
 
@@ -87,6 +94,7 @@ export interface ContainerRenderContext {
   type: string;
   info: string;
   title?: string;
+  closed: boolean;
   raw: string;
   text: string;
   innerHtml: string;

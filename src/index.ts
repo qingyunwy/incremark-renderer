@@ -15,6 +15,7 @@ export type {
   BlockExtractionResult,
   CodeBlockRenderContext,
   CodeBlockRenderer,
+  CodeBlockToken,
   BlockRenderer,
   ContainerOptions,
   ContainerRenderContext,

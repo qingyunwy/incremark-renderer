@@ -72,3 +72,32 @@ test('renderer keeps unfinished ::: container in tail until it closes', () => {
   assert.match(renderer.renderToString(), /class="incremark-container incremark-container-note"/);
   assert.match(renderer.renderToString(), /<p>Hello<\/p>/);
 });
+
+test('renderer updates closed flag for ::: containers while streaming', () => {
+  const renderer = new StreamMarkdownRenderer({
+    container: {
+      render: ({ closed, innerHtml }) => `<aside data-closed="${String(closed)}">${innerHtml}</aside>`,
+    },
+  });
+
+  renderer.append(':::note\nHello');
+  assert.match(renderer.renderToString(), /<aside data-closed="false"><p>Hello<\/p>/);
+
+  renderer.append('\n:::\n');
+  assert.match(renderer.renderToString(), /<aside data-closed="true"><p>Hello<\/p>/);
+});
+
+test('renderer updates closed flag for fenced code blocks while streaming', () => {
+  const renderer = new StreamMarkdownRenderer({
+    highlight: {
+      renderBlock: ({ closed, bodyHtml }) =>
+        `<div class="code-shell" data-closed="${String(closed)}"><pre><code>${bodyHtml}</code></pre></div>`,
+    },
+  });
+
+  renderer.append('```ts\nconst a = 1;\n');
+  assert.match(renderer.renderToString(), /<div class="code-shell" data-closed="false"><pre><code>/);
+
+  renderer.append('```\n');
+  assert.match(renderer.renderToString(), /<div class="code-shell" data-closed="true"><pre><code>/);
+});

@@ -389,7 +389,8 @@ function scanContainer(src) {
           text: src.slice(contentStart, cursor),
           containerType: opening.type,
           info: opening.info,
-          title: opening.title
+          title: opening.title,
+          closed: true
         };
       }
     }
@@ -401,7 +402,8 @@ function scanContainer(src) {
     text: src.slice(contentStart),
     containerType: opening.type,
     info: opening.info,
-    title: opening.title
+    title: opening.title,
+    closed: false
   };
 }
 function createContainerExtension(options = {}) {
@@ -434,6 +436,7 @@ function createContainerExtension(options = {}) {
             type: container.containerType,
             info: container.info,
             title: container.title,
+            closed: container.closed,
             raw: container.raw,
             text: container.text,
             innerHtml,
@@ -594,6 +597,28 @@ function normalizeCodeText(value) {
 function normalizeLanguage(value) {
   return value?.trim().match(INFO_LANGUAGE_RE)?.[0];
 }
+function isCodeBlockClosed(token) {
+  const firstLineEnd = token.raw.indexOf("\n");
+  if (firstLineEnd === -1) {
+    return true;
+  }
+  const openingLine = token.raw.slice(0, firstLineEnd + 1);
+  const fence = getFenceStart(openingLine);
+  if (!fence) {
+    return true;
+  }
+  const trailingSource = token.raw.slice(firstLineEnd + 1);
+  if (!trailingSource) {
+    return false;
+  }
+  const trimmedTrailingSource = trailingSource.endsWith("\n") ? trailingSource.slice(0, -1) : trailingSource;
+  if (!trimmedTrailingSource) {
+    return false;
+  }
+  const lastLineStart = trimmedTrailingSource.lastIndexOf("\n");
+  const lastLine = lastLineStart === -1 ? trimmedTrailingSource : trimmedTrailingSource.slice(lastLineStart + 1);
+  return isFenceEnd(lastLine, fence);
+}
 function buildCodeClassName(language) {
   const classes = ["hljs"];
   if (language) {
@@ -619,6 +644,7 @@ function renderCodeBlockHeader(options) {
     language: options.language,
     declaredLanguage: options.declaredLanguage,
     highlighted: options.highlighted,
+    closed: options.closed,
     defaultHeaderContent: renderLanguageBadge(options.language)
   };
   const customHeader = options.renderHeader?.(context);
@@ -662,6 +688,7 @@ function renderCodeBlock(options) {
     language: options.language,
     declaredLanguage: options.declaredLanguage,
     highlighted: options.highlighted,
+    closed: options.closed,
     defaultHeaderContent: header.defaultHeaderContent,
     headerHtml: header.headerHtml,
     bodyHtml: options.bodyHtml,
@@ -693,6 +720,8 @@ function createHighlightExtension(options = {}, runtime = {}) {
   return {
     renderer: {
       code(token) {
+        const codeToken = token;
+        codeToken.closed = isCodeBlockClosed(token);
         const sourceCode = token.text;
         const renderedCode = normalizeCodeText(sourceCode);
         const declaredLanguage = normalizeLanguage(token.lang);
@@ -710,6 +739,7 @@ function createHighlightExtension(options = {}, runtime = {}) {
               codeClassName: buildCodeClassName(configuredLanguage),
               declaredLanguage,
               highlighted: true,
+              closed: codeToken.closed,
               language: configuredLanguage,
               languageRenderers,
               renderBlock: options.renderBlock,
@@ -725,6 +755,7 @@ function createHighlightExtension(options = {}, runtime = {}) {
                 codeClassName: buildCodeClassName(result.language),
                 declaredLanguage,
                 highlighted: true,
+                closed: codeToken.closed,
                 language: result.language,
                 languageRenderers,
                 renderBlock: options.renderBlock,
@@ -742,6 +773,7 @@ function createHighlightExtension(options = {}, runtime = {}) {
           codeClassName,
           declaredLanguage,
           highlighted: false,
+          closed: codeToken.closed,
           language: configuredLanguage,
           languageRenderers,
           renderBlock: options.renderBlock,

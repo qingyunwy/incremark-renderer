@@ -108,6 +108,7 @@ function scanContainer(src: string): Omit<ContainerToken, 'tokens'> | null {
           containerType: opening.type,
           info: opening.info,
           title: opening.title,
+          closed: true,
         };
       }
     }
@@ -122,6 +123,7 @@ function scanContainer(src: string): Omit<ContainerToken, 'tokens'> | null {
     containerType: opening.type,
     info: opening.info,
     title: opening.title,
+    closed: false,
   };
 }
 
@@ -161,6 +163,7 @@ export function createContainerExtension(
             type: container.containerType,
             info: container.info,
             title: container.title,
+            closed: container.closed,
             raw: container.raw,
             text: container.text,
             innerHtml,

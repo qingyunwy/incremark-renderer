@@ -1,11 +1,13 @@
 import hljs from 'highlight.js';
 import type { MarkedExtension, Tokens } from 'marked';
 
+import { getFenceStart, isFenceEnd } from './container-syntax.js';
 import type {
   CodeBlockRenderContext,
   CodeBlockRenderer,
   CodeBlockHeaderRenderContext,
   CodeHighlightOptions,
+  CodeBlockToken,
 } from './types.js';
 
 const TRAILING_NEWLINE_RE = /\n$/u;
@@ -29,6 +31,38 @@ function normalizeCodeText(value: string): string {
 
 function normalizeLanguage(value?: string): string | undefined {
   return value?.trim().match(INFO_LANGUAGE_RE)?.[0];
+}
+
+function isCodeBlockClosed(token: Tokens.Code): boolean {
+  const firstLineEnd = token.raw.indexOf('\n');
+  if (firstLineEnd === -1) {
+    return true;
+  }
+
+  const openingLine = token.raw.slice(0, firstLineEnd + 1);
+  const fence = getFenceStart(openingLine);
+  if (!fence) {
+    return true;
+  }
+
+  const trailingSource = token.raw.slice(firstLineEnd + 1);
+  if (!trailingSource) {
+    return false;
+  }
+
+  const trimmedTrailingSource = trailingSource.endsWith('\n')
+    ? trailingSource.slice(0, -1)
+    : trailingSource;
+  if (!trimmedTrailingSource) {
+    return false;
+  }
+
+  const lastLineStart = trimmedTrailingSource.lastIndexOf('\n');
+  const lastLine = lastLineStart === -1
+    ? trimmedTrailingSource
+    : trimmedTrailingSource.slice(lastLineStart + 1);
+
+  return isFenceEnd(lastLine, fence);
 }
 
 function buildCodeClassName(language?: string): string {
@@ -57,7 +91,7 @@ function renderLanguageBadge(language?: string): string {
 }
 
 function renderCodeBlockHeader(
-  options: Pick<CodeBlockHeaderRenderContext, 'code' | 'language' | 'declaredLanguage' | 'highlighted'> &
+  options: Pick<CodeBlockHeaderRenderContext, 'code' | 'language' | 'declaredLanguage' | 'highlighted' | 'closed'> &
     Pick<CodeHighlightOptions, 'renderHeader'>,
 ): { defaultHeaderContent: string; headerHtml: string } {
   const context: CodeBlockHeaderRenderContext = {
@@ -65,6 +99,7 @@ function renderCodeBlockHeader(
     language: options.language,
     declaredLanguage: options.declaredLanguage,
     highlighted: options.highlighted,
+    closed: options.closed,
     defaultHeaderContent: renderLanguageBadge(options.language),
   };
   const customHeader = options.renderHeader?.(context);
@@ -121,6 +156,7 @@ function renderCodeBlock(
     codeClassName?: string;
     declaredLanguage?: string;
     highlighted: boolean;
+    closed: boolean;
     language?: string;
     renderBlock?: CodeHighlightOptions['renderBlock'];
     renderHeader?: CodeHighlightOptions['renderHeader'];
@@ -135,6 +171,7 @@ function renderCodeBlock(
     language: options.language,
     declaredLanguage: options.declaredLanguage,
     highlighted: options.highlighted,
+    closed: options.closed,
     defaultHeaderContent: header.defaultHeaderContent,
     headerHtml: header.headerHtml,
     bodyHtml: options.bodyHtml,
@@ -177,6 +214,8 @@ export function createHighlightExtension(
   return {
     renderer: {
       code(token: Tokens.Code): string {
+        const codeToken = token as CodeBlockToken;
+        codeToken.closed = isCodeBlockClosed(token);
         const sourceCode = token.text;
         const renderedCode = normalizeCodeText(sourceCode);
         const declaredLanguage = normalizeLanguage(token.lang);
@@ -197,6 +236,7 @@ export function createHighlightExtension(
               codeClassName: buildCodeClassName(configuredLanguage),
               declaredLanguage,
               highlighted: true,
+              closed: codeToken.closed,
               language: configuredLanguage,
               languageRenderers,
               renderBlock: options.renderBlock,
@@ -213,6 +253,7 @@ export function createHighlightExtension(
                 codeClassName: buildCodeClassName(result.language),
                 declaredLanguage,
                 highlighted: true,
+                closed: codeToken.closed,
                 language: result.language,
                 languageRenderers,
                 renderBlock: options.renderBlock,
@@ -235,6 +276,7 @@ export function createHighlightExtension(
           codeClassName,
           declaredLanguage,
           highlighted: false,
+          closed: codeToken.closed,
           language: configuredLanguage,
           languageRenderers,
           renderBlock: options.renderBlock,
