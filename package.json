@@ -44,7 +44,8 @@
   "dependencies": {
     "highlight.js": "^11.11.1",
     "katex": "^0.16.40",
-    "marked": "^16.0.0"
+    "marked": "^16.0.0",
+    "xss": "^1.0.15"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

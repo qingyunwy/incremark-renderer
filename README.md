@@ -9,6 +9,7 @@
 - a ChatGPT-style markdown typewriter for frontend streaming playback
 - built-in fenced code syntax highlighting powered by `highlight.js`
 - TeX/LaTeX math support for inline and block formulas
+- built-in HTML sanitization for rendered output
 
 Chinese documentation: [README.zh-CN.md](./README.zh-CN.md)
 
@@ -26,6 +27,7 @@ npm install incremark-renderer
 - Emits block-level render patches so unchanged DOM stays mounted.
 - Highlights fenced code blocks out of the box and emits `hljs` / `language-*` classes.
 - Supports inline math, block math, adaptive typewriter playback, and a DOM cursor controller.
+- Sanitizes rendered HTML by default to strip dangerous raw HTML and URL schemes.
 
 ## Quick Start
 
@@ -104,6 +106,32 @@ const renderer = new IncrementalDomRenderer(root);
 renderer.append('# Title\n\nPartial');
 renderer.append(' paragraph');
 renderer.finalize();
+```
+
+## HTML Sanitization
+
+Rendered block HTML is sanitized by default before it is returned from
+`renderMarkdownToString()` or mounted by `IncrementalDomRenderer`. This removes
+dangerous inline handlers and URL schemes such as `javascript:` while preserving
+the renderer's own code-block markup, container markup, and MathML output.
+
+Disable sanitization only if both the Markdown input and all custom render hooks
+are fully trusted:
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  sanitizeHtml: false,
+});
+```
+
+You can also provide a custom sanitizer function:
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  sanitizeHtml: {
+    sanitizer: (html) => myTrustedSanitizer(html),
+  },
+});
 ```
 
 ### Patch Types

@@ -121,7 +121,6 @@ function sanitizeClassNameSegment(value) {
 }
 
 function renderDemoContainer({ type, title, innerHtml }) {
-  console.log("renderDemoContainer", type, title, innerHtml)
   const safeType = escapeHtml(type);
   const safeTitle = title
     ? `<strong class="demo-callout-title">${escapeHtml(title)}</strong>`

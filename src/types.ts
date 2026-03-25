@@ -40,6 +40,12 @@ export interface FullRenderResult {
   snapshot: StreamRendererSnapshot;
 }
 
+export type HtmlSanitizer = (html: string) => string;
+
+export interface HtmlSanitizeOptions {
+  sanitizer?: HtmlSanitizer;
+}
+
 export interface CodeBlockHeaderRenderContext {
   code: string;
   language?: string;
@@ -88,6 +94,7 @@ export interface CodeHighlightOptions {
 
 export interface StreamMarkdownOptions {
   marked?: MarkedOptions;
+  sanitizeHtml?: HtmlSanitizeOptions | false;
   container?: ContainerOptions | false;
   math?: MathRenderOptions | false;
   highlight?: CodeHighlightOptions | false;

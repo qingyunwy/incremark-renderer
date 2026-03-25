@@ -29,6 +29,7 @@ await Promise.all([
   bundleDependency('marked', 'marked.js'),
   bundleDependency('katex', 'katex.js'),
   bundleDependency('highlight.js', 'highlight.js'),
+  bundleDependency('xss', 'xss.js'),
 ]);
 
 console.log(`Demo vendor bundles written to ${vendorDir}`);

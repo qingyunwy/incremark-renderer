@@ -13,6 +13,7 @@
 - 打字光标跟随控制器
 - 内置 fenced code block 代码高亮能力
 - TeX / LaTeX 行内与块级数学公式渲染
+- 默认启用渲染结果 HTML 安全清洗
 
 English documentation: [README.md](./README.md)
 
@@ -136,6 +137,31 @@ const renderer = new IncrementalDomRenderer(root);
 renderer.append('## Hello\n\nPart');
 renderer.append('ial render');
 renderer.finalize();
+```
+
+## HTML 安全清洗
+
+现在默认会在 block HTML 输出后做一次 sanitizer 处理。无论你是调用
+`renderMarkdownToString()`，还是使用 `IncrementalDomRenderer` 挂载到 DOM，
+都会先剥离危险的内联事件属性和 `javascript:` 这类危险 URL scheme，同时尽量保留
+代码高亮结构、自定义容器结构和 MathML 数学公式输出。
+
+只有在 Markdown 输入和所有自定义渲染回调都完全可信时，才建议显式关闭：
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  sanitizeHtml: false,
+});
+```
+
+如果你希望接入自己的 sanitizer，也可以传入自定义函数：
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  sanitizeHtml: {
+    sanitizer: (html) => myTrustedSanitizer(html),
+  },
+});
 ```
 
 ## Patch 说明

@@ -389,6 +389,113 @@ function createContainerExtension(options = {}) {
   };
 }
 
+// src/html-sanitizer.ts
+import xss from "xss";
+var xssRuntime = xss;
+var {
+  FilterXSS,
+  friendlyAttrValue,
+  getDefaultWhiteList,
+  safeAttrValue: defaultSafeAttrValue
+} = xssRuntime;
+var GENERIC_SAFE_ATTR_RE = /^(class|role|aria-[a-z0-9_-]+|data-[a-z0-9_-]+)$/u;
+var URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/iu;
+var MATHML_TAGS = [
+  "math",
+  "semantics",
+  "annotation",
+  "mrow",
+  "mi",
+  "mn",
+  "mo",
+  "mtext",
+  "mfrac",
+  "msup",
+  "msub",
+  "msubsup",
+  "msqrt",
+  "mroot",
+  "mspace",
+  "mstyle",
+  "mpadded",
+  "mphantom",
+  "menclose",
+  "mfenced",
+  "mtable",
+  "mtr",
+  "mtd",
+  "munder",
+  "mover",
+  "munderover",
+  "mprescripts",
+  "none"
+];
+function escapeAttributeValue(value) {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("'", "&#39;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+function cloneAllowList() {
+  const allowList = getDefaultWhiteList();
+  allowList.button = ["type", "disabled", "name", "value"];
+  allowList.aside = allowList.aside ?? [];
+  allowList.article = allowList.article ?? [];
+  allowList.section = allowList.section ?? [];
+  allowList.header = allowList.header ?? [];
+  allowList.footer = allowList.footer ?? [];
+  allowList.span = [...allowList.span ?? [], "class"];
+  allowList.div = [...allowList.div ?? [], "class", "data-language", "data-container-type"];
+  allowList.pre = [...allowList.pre ?? [], "class"];
+  allowList.code = [...allowList.code ?? [], "class"];
+  for (const tag of MATHML_TAGS) {
+    allowList[tag] = [];
+  }
+  allowList.math = ["xmlns", "display", "class"];
+  allowList.annotation = ["encoding"];
+  return allowList;
+}
+function isRelativeUrl(value) {
+  return value.startsWith("#") || value.startsWith("/") || value.startsWith("./") || value.startsWith("../") || value.startsWith("?") || value.startsWith("//") || !URL_SCHEME_RE.test(value);
+}
+function isAllowedHref(value) {
+  const normalized = value.toLowerCase();
+  return normalized.startsWith("http:") || normalized.startsWith("https:") || normalized.startsWith("mailto:") || normalized.startsWith("tel:") || isRelativeUrl(value);
+}
+function isAllowedSrc(value) {
+  const normalized = value.toLowerCase();
+  return normalized.startsWith("http:") || normalized.startsWith("https:") || isRelativeUrl(value);
+}
+var safeAttrValue = (tag, name, value, cssFilter) => {
+  const normalized = friendlyAttrValue(value).trim();
+  const attrName = name.toLowerCase();
+  if (attrName === "href") {
+    return isAllowedHref(normalized) ? defaultSafeAttrValue(tag, name, normalized, cssFilter) : "";
+  }
+  if (attrName === "src") {
+    return isAllowedSrc(normalized) ? defaultSafeAttrValue(tag, name, normalized, cssFilter) : "";
+  }
+  return defaultSafeAttrValue(tag, name, value, cssFilter);
+};
+var onTagAttr = (tag, name, value, isWhiteAttr) => {
+  if (isWhiteAttr) {
+    return;
+  }
+  const attrName = name.toLowerCase();
+  if (!GENERIC_SAFE_ATTR_RE.test(attrName)) {
+    return;
+  }
+  return `${attrName}="${escapeAttributeValue(value)}"`;
+};
+function createDefaultHtmlSanitizer() {
+  const sanitizer = new FilterXSS({
+    allowList: cloneAllowList(),
+    safeAttrValue,
+    onTagAttr
+  });
+  return (html) => sanitizer.process(html);
+}
+function createHtmlSanitizer(options = {}) {
+  return options.sanitizer ?? createDefaultHtmlSanitizer();
+}
+
 // src/renderers.ts
 var DefaultBlockRenderer = class {
   marked;
@@ -679,6 +786,7 @@ var StreamMarkdownRenderer = class {
   marked;
   mathEnabled;
   renderer;
+  sanitizeHtml;
   plugins;
   stableBlocks = [];
   source = "";
@@ -701,6 +809,7 @@ var StreamMarkdownRenderer = class {
       this.marked.setOptions(options.marked);
     }
     this.renderer = options.renderer ?? new DefaultBlockRenderer(this.marked);
+    this.sanitizeHtml = options.sanitizeHtml === false ? null : createHtmlSanitizer(options.sanitizeHtml ?? {});
     this.plugins = options.plugins ?? [];
   }
   append(chunk) {
@@ -790,6 +899,12 @@ var StreamMarkdownRenderer = class {
     };
     for (const plugin of this.plugins) {
       nextBlock = plugin.onBlockParsed?.(nextBlock) ?? nextBlock;
+    }
+    if (this.sanitizeHtml) {
+      nextBlock = {
+        ...nextBlock,
+        html: this.sanitizeHtml(nextBlock.html)
+      };
     }
     return nextBlock;
   }
@@ -1470,7 +1585,9 @@ export {
   StreamingMarkdownTypewriter,
   TypewriterCursorController,
   createContainerExtension,
+  createDefaultHtmlSanitizer,
   createHighlightExtension,
+  createHtmlSanitizer,
   createMathExtension,
   diffAst,
   digestTokens,

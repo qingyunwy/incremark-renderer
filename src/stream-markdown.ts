@@ -4,6 +4,7 @@ import { diffAst, digestTokens } from './ast-diff.js';
 import { extractStableBlocks } from './block-boundary.js';
 import { createContainerExtension } from './container.js';
 import { createHighlightExtension } from './highlight.js';
+import { createHtmlSanitizer } from './html-sanitizer.js';
 import { createMathExtension } from './math.js';
 import { DefaultBlockRenderer } from './renderers.js';
 import type {
@@ -30,6 +31,7 @@ export class StreamMarkdownRenderer {
   private readonly marked: Marked;
   private readonly mathEnabled: boolean;
   private readonly renderer: NonNullable<StreamMarkdownOptions['renderer']>;
+  private readonly sanitizeHtml: ((html: string) => string) | null;
   private readonly plugins: NonNullable<StreamMarkdownOptions['plugins']>;
   private readonly stableBlocks: StableBlock[] = [];
   private source = '';
@@ -53,6 +55,9 @@ export class StreamMarkdownRenderer {
       this.marked.setOptions(options.marked);
     }
     this.renderer = options.renderer ?? new DefaultBlockRenderer(this.marked);
+    this.sanitizeHtml = options.sanitizeHtml === false
+      ? null
+      : createHtmlSanitizer(options.sanitizeHtml ?? {});
     this.plugins = options.plugins ?? [];
   }
 
@@ -167,6 +172,13 @@ export class StreamMarkdownRenderer {
     // core marked-based parse/render pass has completed.
     for (const plugin of this.plugins) {
       nextBlock = plugin.onBlockParsed?.(nextBlock) ?? nextBlock;
+    }
+
+    if (this.sanitizeHtml) {
+      nextBlock = {
+        ...nextBlock,
+        html: this.sanitizeHtml(nextBlock.html),
+      };
     }
 
     return nextBlock;
