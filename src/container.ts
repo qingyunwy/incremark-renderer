@@ -115,7 +115,14 @@ function scanContainer(src: string): Omit<ContainerToken, 'tokens'> | null {
     cursor = next;
   }
 
-  return null;
+  return {
+    type: 'customContainer',
+    raw: src,
+    text: src.slice(contentStart),
+    containerType: opening.type,
+    info: opening.info,
+    title: opening.title,
+  };
 }
 
 export function createContainerExtension(

@@ -41,6 +41,14 @@ test('renderMarkdownToString ignores ::: markers inside fenced code within conta
   assert.match(html, /<code[^>]*>:::\n<\/code>/);
 });
 
+test('renderMarkdownToString renders unfinished ::: containers as open containers', () => {
+  const html = renderMarkdownToString(':::note Draft\nStreaming body');
+
+  assert.match(html, /class="incremark-container incremark-container-note"/);
+  assert.match(html, /<div class="incremark-container-title">Draft<\/div>/);
+  assert.match(html, /<div class="incremark-container-content"><p>Streaming body<\/p>/);
+});
+
 test('renderMarkdown returns blocks and snapshot for full rendering', () => {
   const result = renderMarkdown('## Title\n\nBody');
   assert.match(result.html, /<h2>Title<\/h2>/);

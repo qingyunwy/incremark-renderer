@@ -63,7 +63,8 @@ test('renderer keeps unfinished ::: container in tail until it closes', () => {
   const first = renderer.append(':::note\nHello');
   assert.equal(first.length, 1);
   assert.equal(first[0]?.type, 'insert');
-  assert.match(renderer.renderToString(), /<p>:::note\nHello<\/p>/);
+  assert.match(renderer.renderToString(), /class="incremark-container incremark-container-note"/);
+  assert.match(renderer.renderToString(), /<div class="incremark-container-content"><p>Hello<\/p>/);
 
   const second = renderer.append('\n:::\n');
   assert.equal(second.length, 1);
