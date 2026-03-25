@@ -624,14 +624,64 @@ function renderCodeBlockHeader(options) {
   const customHeader = options.renderHeader?.(context);
   const headerContent = customHeader === void 0 ? context.defaultHeaderContent : customHeader;
   if (!headerContent) {
-    return "";
+    return {
+      defaultHeaderContent: context.defaultHeaderContent,
+      headerHtml: ""
+    };
   }
-  return `<div class="incremark-code-block-header">${headerContent}</div>`;
+  return {
+    defaultHeaderContent: context.defaultHeaderContent,
+    headerHtml: `<div class="incremark-code-block-header">${headerContent}</div>`
+  };
 }
-function renderCodeBlock(html, options) {
-  const classAttribute = options.classes ? ` class="${options.classes}"` : "";
-  return `<div class="incremark-code-block"${buildWrapperAttributes(options.language)}>${renderCodeBlockHeader(options)}<pre><code${classAttribute}>${html}</code></pre></div>
+function normalizeRendererMap(renderers) {
+  if (!renderers) {
+    return void 0;
+  }
+  return Object.fromEntries(
+    Object.entries(renderers).map(([language, renderer]) => [normalizeLanguage(language), renderer]).filter((entry) => Boolean(entry[0] && entry[1]))
+  );
+}
+function resolveLanguageRenderer(renderers, declaredLanguage, language) {
+  if (!renderers) {
+    return void 0;
+  }
+  const declared = declaredLanguage ? renderers[declaredLanguage] : void 0;
+  if (declared) {
+    return declared;
+  }
+  return language ? renderers[language] : void 0;
+}
+function renderCodeBlock(options) {
+  const header = renderCodeBlockHeader(options);
+  const classAttribute = options.codeClassName ? ` class="${options.codeClassName}"` : "";
+  const defaultHtml = `<div class="incremark-code-block"${buildWrapperAttributes(options.language)}>${header.headerHtml}<pre><code${classAttribute}>${options.bodyHtml}</code></pre></div>
 `;
+  const context = {
+    code: options.code,
+    language: options.language,
+    declaredLanguage: options.declaredLanguage,
+    highlighted: options.highlighted,
+    defaultHeaderContent: header.defaultHeaderContent,
+    headerHtml: header.headerHtml,
+    bodyHtml: options.bodyHtml,
+    codeClassName: options.codeClassName,
+    defaultHtml
+  };
+  const languageRenderer = resolveLanguageRenderer(
+    options.languageRenderers,
+    options.declaredLanguage,
+    options.language
+  );
+  const languageHtml = languageRenderer?.(context);
+  if (languageHtml !== void 0 && languageHtml !== null) {
+    return languageHtml;
+  }
+  const customHtml = options.renderBlock?.(context);
+  if (customHtml !== void 0 && customHtml !== null) {
+    return customHtml;
+  }
+  return defaultHtml;
 }
 function getAutoDetectLanguages(options) {
   const languages = options.languages?.map((language) => normalizeLanguage(language)).filter((language) => Boolean(language && import_highlight.default.getLanguage(language)));
@@ -639,6 +689,7 @@ function getAutoDetectLanguages(options) {
 }
 function createHighlightExtension(options = {}, runtime = {}) {
   const highlightEnabled = runtime.highlightEnabled !== false;
+  const languageRenderers = normalizeRendererMap(options.languageRenderers);
   return {
     renderer: {
       code(token) {
@@ -653,24 +704,30 @@ function createHighlightExtension(options = {}, runtime = {}) {
               language: configuredLanguage,
               ignoreIllegals: true
             });
-            return renderCodeBlock(result.value, {
-              classes: buildCodeClassName(configuredLanguage),
+            return renderCodeBlock({
+              bodyHtml: result.value,
               code: sourceCode,
+              codeClassName: buildCodeClassName(configuredLanguage),
               declaredLanguage,
               highlighted: true,
               language: configuredLanguage,
+              languageRenderers,
+              renderBlock: options.renderBlock,
               renderHeader: options.renderHeader
             });
           }
           if (highlightEnabled && options.autoDetect) {
             const result = import_highlight.default.highlightAuto(renderedCode, getAutoDetectLanguages(options));
             if (result.language) {
-              return renderCodeBlock(result.value, {
-                classes: buildCodeClassName(result.language),
+              return renderCodeBlock({
+                bodyHtml: result.value,
                 code: sourceCode,
+                codeClassName: buildCodeClassName(result.language),
                 declaredLanguage,
                 highlighted: true,
                 language: result.language,
+                languageRenderers,
+                renderBlock: options.renderBlock,
                 renderHeader: options.renderHeader
               });
             }
@@ -678,13 +735,16 @@ function createHighlightExtension(options = {}, runtime = {}) {
         } catch {
         }
         const plainCode = token.escaped ? renderedCode : escapeHtml2(renderedCode);
-        const className = configuredLanguage ? `language-${escapeHtml2(configuredLanguage)}` : void 0;
-        return renderCodeBlock(plainCode, {
-          classes: className,
+        const codeClassName = configuredLanguage ? `language-${escapeHtml2(configuredLanguage)}` : void 0;
+        return renderCodeBlock({
+          bodyHtml: plainCode,
           code: sourceCode,
+          codeClassName,
           declaredLanguage,
           highlighted: false,
           language: configuredLanguage,
+          languageRenderers,
+          renderBlock: options.renderBlock,
           renderHeader: options.renderHeader
         });
       }

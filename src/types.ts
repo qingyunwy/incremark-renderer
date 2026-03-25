@@ -58,6 +58,22 @@ export type CodeBlockHeaderRenderer = (
   context: CodeBlockHeaderRenderContext,
 ) => string | null | undefined;
 
+export interface CodeBlockRenderContext {
+  code: string;
+  language?: string;
+  declaredLanguage?: string;
+  highlighted: boolean;
+  defaultHeaderContent: string;
+  headerHtml: string;
+  bodyHtml: string;
+  codeClassName?: string;
+  defaultHtml: string;
+}
+
+export type CodeBlockRenderer = (
+  context: CodeBlockRenderContext,
+) => string | null | undefined;
+
 export interface ContainerToken extends Tokens.Generic {
   type: 'customContainer';
   text: string;
@@ -90,6 +106,8 @@ export interface CodeHighlightOptions {
   defaultLanguage?: string;
   languages?: string[];
   renderHeader?: CodeBlockHeaderRenderer;
+  renderBlock?: CodeBlockRenderer;
+  languageRenderers?: Record<string, CodeBlockRenderer>;
 }
 
 export interface StreamMarkdownOptions {

@@ -46,6 +46,18 @@ interface CodeBlockHeaderRenderContext {
     defaultHeaderContent: string;
 }
 type CodeBlockHeaderRenderer = (context: CodeBlockHeaderRenderContext) => string | null | undefined;
+interface CodeBlockRenderContext {
+    code: string;
+    language?: string;
+    declaredLanguage?: string;
+    highlighted: boolean;
+    defaultHeaderContent: string;
+    headerHtml: string;
+    bodyHtml: string;
+    codeClassName?: string;
+    defaultHtml: string;
+}
+type CodeBlockRenderer = (context: CodeBlockRenderContext) => string | null | undefined;
 interface ContainerToken extends Tokens.Generic {
     type: 'customContainer';
     text: string;
@@ -72,6 +84,8 @@ interface CodeHighlightOptions {
     defaultLanguage?: string;
     languages?: string[];
     renderHeader?: CodeBlockHeaderRenderer;
+    renderBlock?: CodeBlockRenderer;
+    languageRenderers?: Record<string, CodeBlockRenderer>;
 }
 interface StreamMarkdownOptions {
     marked?: MarkedOptions;
@@ -255,4 +269,4 @@ declare class StreamingMarkdownTypewriter extends BaseMarkdownTypewriter {
     protected isInputClosed(): boolean;
 }
 
-export { type AstNodePatch, type BlockExtractionResult, type BlockRenderer, type CodeBlockHeaderRenderContext, type CodeBlockHeaderRenderer, type CodeHighlightOptions, type ContainerOptions, type ContainerRenderContext, type ContainerRenderer, type ContainerToken, DefaultBlockRenderer, type FullRenderResult, type HtmlSanitizeOptions, type HtmlSanitizer, IncrementalDomRenderer, MarkdownTypewriter, type MathRenderOptions, type RenderPatch, type StableBlock, type StreamMarkdownOptions, type StreamMarkdownPlugin, StreamMarkdownRenderer, type StreamRendererSnapshot, StreamingMarkdownTypewriter, type TokensList, type TypewriterChunkMeta, TypewriterCursorController, type TypewriterCursorOptions, type TypewriterEventMeta, type TypewriterOptions, type TypewriterState, createContainerExtension, createDefaultHtmlSanitizer, createHighlightExtension, createHtmlSanitizer, createMathExtension, diffAst, digestTokens, extractStableBlocks, renderMarkdown, renderMarkdownToString, wrapBlockHtml };
+export { type AstNodePatch, type BlockExtractionResult, type BlockRenderer, type CodeBlockHeaderRenderContext, type CodeBlockHeaderRenderer, type CodeBlockRenderContext, type CodeBlockRenderer, type CodeHighlightOptions, type ContainerOptions, type ContainerRenderContext, type ContainerRenderer, type ContainerToken, DefaultBlockRenderer, type FullRenderResult, type HtmlSanitizeOptions, type HtmlSanitizer, IncrementalDomRenderer, MarkdownTypewriter, type MathRenderOptions, type RenderPatch, type StableBlock, type StreamMarkdownOptions, type StreamMarkdownPlugin, StreamMarkdownRenderer, type StreamRendererSnapshot, StreamingMarkdownTypewriter, type TokensList, type TypewriterChunkMeta, TypewriterCursorController, type TypewriterCursorOptions, type TypewriterEventMeta, type TypewriterOptions, type TypewriterState, createContainerExtension, createDefaultHtmlSanitizer, createHighlightExtension, createHtmlSanitizer, createMathExtension, diffAst, digestTokens, extractStableBlocks, renderMarkdown, renderMarkdownToString, wrapBlockHtml };

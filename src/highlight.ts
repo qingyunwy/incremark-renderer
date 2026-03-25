@@ -2,6 +2,8 @@ import hljs from 'highlight.js';
 import type { MarkedExtension, Tokens } from 'marked';
 
 import type {
+  CodeBlockRenderContext,
+  CodeBlockRenderer,
   CodeBlockHeaderRenderContext,
   CodeHighlightOptions,
 } from './types.js';
@@ -57,7 +59,7 @@ function renderLanguageBadge(language?: string): string {
 function renderCodeBlockHeader(
   options: Pick<CodeBlockHeaderRenderContext, 'code' | 'language' | 'declaredLanguage' | 'highlighted'> &
     Pick<CodeHighlightOptions, 'renderHeader'>,
-): string {
+): { defaultHeaderContent: string; headerHtml: string } {
   const context: CodeBlockHeaderRenderContext = {
     code: options.code,
     language: options.language,
@@ -69,25 +71,92 @@ function renderCodeBlockHeader(
   const headerContent = customHeader === undefined ? context.defaultHeaderContent : customHeader;
 
   if (!headerContent) {
-    return '';
+    return {
+      defaultHeaderContent: context.defaultHeaderContent,
+      headerHtml: '',
+    };
   }
 
-  return `<div class="incremark-code-block-header">${headerContent}</div>`;
+  return {
+    defaultHeaderContent: context.defaultHeaderContent,
+    headerHtml: `<div class="incremark-code-block-header">${headerContent}</div>`,
+  };
+}
+
+function normalizeRendererMap(
+  renderers?: Record<string, CodeBlockRenderer>,
+): Record<string, CodeBlockRenderer> | undefined {
+  if (!renderers) {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    Object.entries(renderers)
+      .map(([language, renderer]) => [normalizeLanguage(language), renderer] as const)
+      .filter((entry): entry is [string, CodeBlockRenderer] => Boolean(entry[0] && entry[1])),
+  );
+}
+
+function resolveLanguageRenderer(
+  renderers: Record<string, CodeBlockRenderer> | undefined,
+  declaredLanguage?: string,
+  language?: string,
+): CodeBlockRenderer | undefined {
+  if (!renderers) {
+    return undefined;
+  }
+
+  const declared = declaredLanguage ? renderers[declaredLanguage] : undefined;
+  if (declared) {
+    return declared;
+  }
+
+  return language ? renderers[language] : undefined;
 }
 
 function renderCodeBlock(
-  html: string,
   options: {
-    classes?: string;
+    bodyHtml: string;
     code: string;
+    codeClassName?: string;
     declaredLanguage?: string;
     highlighted: boolean;
     language?: string;
+    renderBlock?: CodeHighlightOptions['renderBlock'];
     renderHeader?: CodeHighlightOptions['renderHeader'];
+    languageRenderers?: Record<string, CodeBlockRenderer>;
   },
 ): string {
-  const classAttribute = options.classes ? ` class="${options.classes}"` : '';
-  return `<div class="incremark-code-block"${buildWrapperAttributes(options.language)}>${renderCodeBlockHeader(options)}<pre><code${classAttribute}>${html}</code></pre></div>\n`;
+  const header = renderCodeBlockHeader(options);
+  const classAttribute = options.codeClassName ? ` class="${options.codeClassName}"` : '';
+  const defaultHtml = `<div class="incremark-code-block"${buildWrapperAttributes(options.language)}>${header.headerHtml}<pre><code${classAttribute}>${options.bodyHtml}</code></pre></div>\n`;
+  const context: CodeBlockRenderContext = {
+    code: options.code,
+    language: options.language,
+    declaredLanguage: options.declaredLanguage,
+    highlighted: options.highlighted,
+    defaultHeaderContent: header.defaultHeaderContent,
+    headerHtml: header.headerHtml,
+    bodyHtml: options.bodyHtml,
+    codeClassName: options.codeClassName,
+    defaultHtml,
+  };
+  const languageRenderer = resolveLanguageRenderer(
+    options.languageRenderers,
+    options.declaredLanguage,
+    options.language,
+  );
+  const languageHtml = languageRenderer?.(context);
+  if (languageHtml !== undefined && languageHtml !== null) {
+    return languageHtml;
+  }
+
+  const customHtml = options.renderBlock?.(context);
+  if (customHtml !== undefined && customHtml !== null) {
+    return customHtml;
+  }
+
+  return defaultHtml;
 }
 
 function getAutoDetectLanguages(options: CodeHighlightOptions): string[] | undefined {
@@ -103,6 +172,7 @@ export function createHighlightExtension(
   runtime: { highlightEnabled?: boolean } = {},
 ): MarkedExtension<string, string> {
   const highlightEnabled = runtime.highlightEnabled !== false;
+  const languageRenderers = normalizeRendererMap(options.languageRenderers);
 
   return {
     renderer: {
@@ -121,12 +191,15 @@ export function createHighlightExtension(
               language: configuredLanguage,
               ignoreIllegals: true,
             });
-            return renderCodeBlock(result.value, {
-              classes: buildCodeClassName(configuredLanguage),
+            return renderCodeBlock({
+              bodyHtml: result.value,
               code: sourceCode,
+              codeClassName: buildCodeClassName(configuredLanguage),
               declaredLanguage,
               highlighted: true,
               language: configuredLanguage,
+              languageRenderers,
+              renderBlock: options.renderBlock,
               renderHeader: options.renderHeader,
             });
           }
@@ -134,12 +207,15 @@ export function createHighlightExtension(
           if (highlightEnabled && options.autoDetect) {
             const result = hljs.highlightAuto(renderedCode, getAutoDetectLanguages(options));
             if (result.language) {
-              return renderCodeBlock(result.value, {
-                classes: buildCodeClassName(result.language),
+              return renderCodeBlock({
+                bodyHtml: result.value,
                 code: sourceCode,
+                codeClassName: buildCodeClassName(result.language),
                 declaredLanguage,
                 highlighted: true,
                 language: result.language,
+                languageRenderers,
+                renderBlock: options.renderBlock,
                 renderHeader: options.renderHeader,
               });
             }
@@ -149,16 +225,19 @@ export function createHighlightExtension(
         }
 
         const plainCode = token.escaped ? renderedCode : escapeHtml(renderedCode);
-        const className = configuredLanguage
+        const codeClassName = configuredLanguage
           ? `language-${escapeHtml(configuredLanguage)}`
           : undefined;
 
-        return renderCodeBlock(plainCode, {
-          classes: className,
+        return renderCodeBlock({
+          bodyHtml: plainCode,
           code: sourceCode,
+          codeClassName,
           declaredLanguage,
           highlighted: false,
           language: configuredLanguage,
+          languageRenderers,
+          renderBlock: options.renderBlock,
           renderHeader: options.renderHeader,
         });
       },

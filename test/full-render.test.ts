@@ -117,6 +117,33 @@ test('renderMarkdownToString can render custom code block header without a langu
   assert.doesNotMatch(html, /incremark-code-language/);
 });
 
+test('renderMarkdownToString supports language-specific custom code block renderers', () => {
+  const html = renderMarkdownToString('```markmap\n# Roadmap\n- Item\n```', {
+    highlight: {
+      languageRenderers: {
+        markmap: ({ code, language }) =>
+          `<div class="markmap-renderer" data-language="${language}" data-markmap="${encodeURIComponent(code)}"></div>`,
+      },
+    },
+  });
+
+  assert.match(html, /<div class="markmap-renderer" data-language="markmap" data-markmap="%23%20Roadmap%0A-%20Item"><\/div>/);
+  assert.doesNotMatch(html, /incremark-code-block/);
+});
+
+test('renderMarkdownToString falls back to default renderer when language-specific hook misses', () => {
+  const html = renderMarkdownToString('```ts\nconst value = 1;\n```', {
+    highlight: {
+      languageRenderers: {
+        markmap: ({ code }) => `<div class="markmap-renderer">${code}</div>`,
+      },
+    },
+  });
+
+  assert.match(html, /class="incremark-code-block"/);
+  assert.match(html, /class="hljs language-ts"/);
+});
+
 test('StreamMarkdownRenderer.setMarkdown replaces current state with full content', () => {
   const renderer = new StreamMarkdownRenderer();
   renderer.append('# Draft');

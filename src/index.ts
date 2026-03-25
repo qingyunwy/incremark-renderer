@@ -13,6 +13,8 @@ export { MarkdownTypewriter, StreamingMarkdownTypewriter } from './typewriter.js
 export type {
   AstNodePatch,
   BlockExtractionResult,
+  CodeBlockRenderContext,
+  CodeBlockRenderer,
   BlockRenderer,
   ContainerOptions,
   ContainerRenderContext,

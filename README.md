@@ -301,6 +301,36 @@ root.addEventListener('click', async (event) => {
 });
 ```
 
+Add language-specific rendering hooks if you want certain fenced blocks to render
+as business components instead of normal code blocks. For example, render
+`markmap` blocks as mind-map placeholders:
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    languageRenderers: {
+      markmap: ({ code, language }) =>
+        `<div class="markmap-view" data-language="${language}" data-markmap="${encodeURIComponent(code)}"></div>`,
+    },
+  },
+});
+```
+
+If you need one generic interception point for all code blocks, use `renderBlock`:
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    renderBlock: ({ declaredLanguage, defaultHtml }) => {
+      if (declaredLanguage === 'markmap') {
+        return '<div class="markmap-view"></div>';
+      }
+      return defaultHtml;
+    },
+  },
+});
+```
+
 ## Typewriter Playback
 
 ```ts

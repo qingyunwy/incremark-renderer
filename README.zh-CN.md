@@ -334,6 +334,34 @@ root.addEventListener('click', async (event) => {
 });
 ```
 
+如果你希望某些特定语言的代码块走业务自定义渲染，而不是普通代码块输出，可以使用按语言配置的 renderer。比如把 `markmap` 代码块渲染成脑图占位节点：
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    languageRenderers: {
+      markmap: ({ code, language }) =>
+        `<div class="markmap-view" data-language="${language}" data-markmap="${encodeURIComponent(code)}"></div>`,
+    },
+  },
+});
+```
+
+如果你想对所有代码块统一拦截，再按语言自行判断，可以使用 `renderBlock`：
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    renderBlock: ({ declaredLanguage, defaultHtml }) => {
+      if (declaredLanguage === 'markmap') {
+        return '<div class="markmap-view"></div>';
+      }
+      return defaultHtml;
+    },
+  },
+});
+```
+
 ## 打字机播放
 
 ```ts
