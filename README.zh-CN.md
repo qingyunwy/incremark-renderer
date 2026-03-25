@@ -1,21 +1,50 @@
 # incremark-renderer
 
-`incremark-renderer` 是一个基于 `marked.js` 的流式 Markdown 渲染 npm 包，面向长文本、高频增量输入和接近 ChatGPT 体验的前端输出场景。
+面向聊天 UI、LLM 产品和流式内容场景的 Markdown 增量渲染器。它基于 `marked.js`，重点解决“Markdown 一边到达、一边渲染”时的性能、稳定性和可扩展性问题。
 
-它当前具备以下能力：
+- GitHub: [qingyunwy/incremark-renderer](https://github.com/qingyunwy/incremark-renderer)
+- npm: [incremark-renderer](https://www.npmjs.com/package/incremark-renderer)
+- English documentation: [README.md](./README.md)
 
-- 基于稳定块边界检测的增量解析
-- 只对新增稳定块和当前尾块执行 `marked.lexer`
-- 基于 token / AST 的局部 Diff 与块级局部重渲染
-- 面向浏览器的 DOM 增量渲染器
-- 历史消息 / 非流式场景下的全量渲染 API
-- ChatGPT 风格的自适应打字机播放
-- 打字光标跟随控制器
-- 内置 fenced code block 代码高亮能力
-- TeX / LaTeX 行内与块级数学公式渲染
-- 默认启用渲染结果 HTML 安全清洗
+## 它是什么
 
-English documentation: [README.md](./README.md)
+`incremark-renderer` 是一个基于 `marked.js` 的流式 Markdown 渲染库。
+
+和“每来一个 chunk 就重新解析整篇 Markdown、再把整个 DOM 重刷一遍”的方案不同，它会：
+
+- 保守地判断哪些块已经稳定
+- 只重新执行“新增稳定块 + 当前尾块”的 `lexer`
+- 对块级 token 树做比较并产出 patch
+- 在浏览器里按块做局部 DOM 更新
+
+同时它还内置了 LLM 场景里常见的能力：
+
+- `highlight.js` 代码高亮
+- `katex` 数学公式渲染
+- `:::` 自定义容器
+- 默认启用的 HTML 安全清洗
+- ChatGPT 风格打字机播放
+
+## 它解决什么问题
+
+如果你的 Markdown 是流式到达的，传统做法通常会遇到这些问题：
+
+- 文档越长，每次全量解析越贵
+- 段落、列表、代码块尚未闭合时会反复抖动
+- DOM 整体替换太频繁，容易闪烁
+- 业务自定义扩展点不够清晰，比如特殊容器、特殊代码块
+
+`incremark-renderer` 就是针对这一类问题设计的。
+
+## 它的优势
+
+- 兼容 `marked.js`：不脱离主流 Markdown 生态
+- 面向流式：核心流程就是围绕 `append()` 设计
+- 稳定块边界检测：未闭合内容会留在可变 tail 中
+- 块级局部更新：不动的块不会重复挂载
+- 可扩展：容器、代码块、sanitizer、block renderer、plugin 都可定制
+- 自带常用能力：高亮、公式、打字机、光标控制器
+- 默认更安全：渲染 HTML 会先经过 sanitizer
 
 ## 安装
 
@@ -23,59 +52,21 @@ English documentation: [README.md](./README.md)
 npm install incremark-renderer
 ```
 
-## 核心特性
+## 我该用哪个 API？
 
-### 1. 严格基于 `marked.js`
-
-项目底层解析器固定为 `marked.js`，没有替换成其他 Markdown 解析库，便于兼容既有生态和规则扩展。
-
-### 2. 增量 Lexer
-
-不会在每次流式输入后重新对整个 Markdown 文档执行全量 `lexer`。当前实现只会重新处理两部分：
-
-- 新增进入稳定态的块
-- 当前仍可能继续增长的尾块
-
-这也是整个性能优化的基础。
-
-### 3. 块级局部渲染
-
-每个块会保存自己的 token 树、结构摘要和 HTML 输出。新一轮输入到来后，会只比较前后发生变化的块，并发出最小化 patch：
-
-- `insert`
-- `replace`
-- `remove`
-
-因此未变更的 DOM 区域可以保持挂载不动，避免长文本全量重绘。
-
-### 4. 全量渲染 API
-
-对于历史记录、消息回放、首屏已有完整 Markdown 内容等场景，项目也提供了正式的全量渲染方法，不需要再手动走 `append + finalize`：
-
-- `renderMarkdownToString(markdown)`
-- `renderMarkdown(markdown)`
-- `StreamMarkdownRenderer#setMarkdown(markdown)`
-- `IncrementalDomRenderer#setMarkdown(markdown)`
-
-### 5. 打字机与光标能力
-
-项目内置了：
-
-- `MarkdownTypewriter`：用于模拟 ChatGPT 风格的流式打字节奏
-- `TypewriterCursorController`：用于在 DOM 中显示跟随末尾文本位置的打字光标
-
-并且在代码块输出期间，可以通过 `meta.inCodeFence` 控制光标隐藏。
-
-### 6. 数学公式支持
-
-默认支持以下数学公式分隔符：
-
-- 行内公式：`$...$`、`\(...\)`
-- 块级公式：`$$...$$`、`\[...\]`
-
-底层使用 `katex.renderToString` 进行渲染，默认输出 `MathML`。
+| 场景 | 推荐 API |
+| --- | --- |
+| 真实流式 Markdown，且不依赖 DOM | `StreamMarkdownRenderer` |
+| 真实流式 Markdown，直接渲染到浏览器 DOM | `IncrementalDomRenderer` |
+| 已经拿到完整 Markdown，只想要 HTML | `renderMarkdownToString()` |
+| 已经拿到完整 Markdown，还想拿 blocks 和 snapshot | `renderMarkdown()` |
+| 已经有完整字符串，只是想做打字机回放 | `MarkdownTypewriter` |
+| 上游内容是实时流式到达 | `StreamingMarkdownTypewriter` |
+| 需要一个跟随输出末尾的打字光标 | `TypewriterCursorController` |
 
 ## 快速开始
+
+### 1. 流式渲染
 
 ```ts
 import { StreamMarkdownRenderer } from 'incremark-renderer';
@@ -87,130 +78,198 @@ renderer.append('流式 Markdown。');
 renderer.finalize();
 
 console.log(renderer.renderToString());
+console.log(renderer.getSnapshot());
 ```
 
-## 全量渲染
+### 2. 浏览器 DOM 渲染
 
-### 直接返回 HTML
+```ts
+import { IncrementalDomRenderer } from 'incremark-renderer';
+
+const root = document.getElementById('app');
+const renderer = new IncrementalDomRenderer(root);
+
+renderer.append('## 标题\n\nPart');
+renderer.append('ial 内容');
+renderer.finalize();
+```
+
+### 3. 全量渲染
 
 ```ts
 import { renderMarkdownToString } from 'incremark-renderer';
 
-const html = renderMarkdownToString('# 历史消息\n\n这是完整内容');
+const html = renderMarkdownToString('# 历史消息\n\n完整内容');
 ```
 
-### 返回 HTML + blocks + snapshot
+如果你还需要 block 元数据：
 
 ```ts
 import { renderMarkdown } from 'incremark-renderer';
 
-const result = renderMarkdown('# 历史消息\n\n这是完整内容');
+const result = renderMarkdown('# 历史消息\n\n完整内容');
 
 console.log(result.html);
 console.log(result.blocks);
 console.log(result.snapshot);
 ```
 
-### 替换已有渲染器内容
+## 核心概念
+
+### Stable Blocks 和 Tail
+
+渲染器会把当前输入拆成两部分：
+
+- stable blocks：已经稳定、不需要再重复 `lexer` 的块
+- tail：最后一个仍可能继续增长的可变片段
+
+这也是整个增量渲染性能模型的基础。
+
+### Render Patch
+
+每次更新会输出块级 patch：
+
+- `insert`：新增可见块
+- `replace`：已有块内容发生变化
+- `remove`：已有块从可见区移除
+
+这既适合框架层消费，也适合直接驱动 DOM。
+
+## 功能说明
+
+### 全量渲染与流式渲染
+
+如果 Markdown 已经完整可用，请直接用 `renderMarkdownToString()` 或 `renderMarkdown()`。
+
+如果 Markdown 是一段段到达的，请持续调用 `append()`，并在流结束时调用 `finalize()`。
+
+如果你想把一个已有 renderer 的内容一次性替换成新文档，请用 `setMarkdown()`。
+
+### 自定义容器
+
+默认支持 `:::` 容器语法。
+
+```ts
+import { renderMarkdownToString } from 'incremark-renderer';
+
+const html = renderMarkdownToString(`:::note 快速开始
+这里可以写 **容器内容**。
+:::`);
+```
+
+默认输出结构包含：
+
+- `.incremark-container`
+- `.incremark-container-{type}`
+- `[data-container-type="{type}"]`
+- `.incremark-container-title`
+- `.incremark-container-content`
+
+你也可以完全自定义外层结构：
 
 ```ts
 import { StreamMarkdownRenderer } from 'incremark-renderer';
 
-const renderer = new StreamMarkdownRenderer();
-renderer.setMarkdown('# 历史记录\n\n一次性加载完成');
-```
-
-如果你已经在浏览器里使用 `IncrementalDomRenderer`，也可以直接：
-
-```ts
-renderer.setMarkdown(markdown);
-```
-
-## 浏览器 DOM 增量渲染
-
-```ts
-import { IncrementalDomRenderer } from 'incremark-renderer';
-
-const root = document.getElementById('app')!;
-const renderer = new IncrementalDomRenderer(root);
-
-renderer.append('## Hello\n\nPart');
-renderer.append('ial render');
-renderer.finalize();
-```
-
-## HTML 安全清洗
-
-现在默认会在 block HTML 输出后做一次 sanitizer 处理。无论你是调用
-`renderMarkdownToString()`，还是使用 `IncrementalDomRenderer` 挂载到 DOM，
-都会先剥离危险的内联事件属性和 `javascript:` 这类危险 URL scheme，同时尽量保留
-代码高亮结构、自定义容器结构和 MathML 数学公式输出。
-
-只有在 Markdown 输入和所有自定义渲染回调都完全可信时，才建议显式关闭：
-
-```ts
 const renderer = new StreamMarkdownRenderer({
-  sanitizeHtml: false,
-});
-```
-
-如果你希望接入自己的 sanitizer，也可以传入自定义函数：
-
-```ts
-const renderer = new StreamMarkdownRenderer({
-  sanitizeHtml: {
-    sanitizer: (html) => myTrustedSanitizer(html),
+  container: {
+    render: ({ type, title, innerHtml, closed }) =>
+      `<aside class="callout callout-${type}" data-closed="${String(closed)}">${title ? `<h3>${title}</h3>` : ''}${innerHtml}</aside>`,
   },
 });
 ```
 
-## Patch 说明
+这里的 `closed` 表示当前容器是否已经出现闭合 `:::`。
 
-渲染器会输出三种 patch：
+如果你不希望启用容器解析，也可以直接关闭：
 
-- `insert`：新增一个可见块
-- `replace`：已有块内容发生变化，需要替换
-- `remove`：已有块从可见区域移除
-
-如果一个块发生了结构变化，patch 中还会带上 `astPatches`，用于描述 token 树的变化路径。
-
-## 数学公式用法
-
-### 行内公式
-
-```md
-欧拉恒等式：$e^{i\pi} + 1 = 0$
-勾股定理：\(a^2 + b^2 = c^2\)
+```ts
+const renderer = new StreamMarkdownRenderer({
+  container: false,
+});
 ```
 
-### 块级公式
+### 代码块与自定义代码块渲染
 
-```md
-$$
-\int_0^1 x^2 \, dx = \frac{1}{3}
-$$
+带语言标记的 fenced code block 默认启用语法高亮。
 
-\[
-\sum_{k=1}^{n} k = \frac{n(n+1)}{2}
-\]
+```ts
+import { renderMarkdownToString } from 'incremark-renderer';
+
+const html = renderMarkdownToString('```ts\nconst value = 1;\n```');
 ```
 
-### 错误处理策略
+如果你想对没有语言标记的代码块启用自动识别：
 
-默认情况下，`katex.renderToString` 使用 `throwOnError: true`。
+```ts
+import { StreamMarkdownRenderer } from 'incremark-renderer';
 
-这意味着：
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    autoDetect: true,
+    languages: ['javascript', 'typescript', 'json'],
+  },
+});
+```
 
-- 公式可正常解析时，输出数学渲染结果
-- 如果 KaTeX 抛错，则直接回退显示“原始公式字符串”
+自定义代码块 header：
 
-例如：
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    renderHeader: ({ code, defaultHeaderContent, closed }) => {
+      const encoded = encodeURIComponent(code);
+      return `${defaultHeaderContent}<button type="button" data-copy-code="${encoded}" data-closed="${String(closed)}">复制</button>`;
+    },
+  },
+});
+```
 
-- 输入 `$...$` 出错，则回退显示原始 `$...$`
-- 输入 `\(...\)` 出错，则回退显示原始 `\(...\)`
-- 输入 `\[...\]` 出错，则回退显示原始 `\[...\]`
+把特定语言渲染成业务组件：
 
-### 自定义 KaTeX 配置
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    languageRenderers: {
+      markmap: ({ code, language, closed }) =>
+        `<div class="markmap-view" data-language="${language}" data-closed="${String(closed)}" data-markmap="${encodeURIComponent(code)}"></div>`,
+    },
+  },
+});
+```
+
+或者统一拦截所有代码块：
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    renderBlock: ({ declaredLanguage, defaultHtml }) => {
+      if (declaredLanguage === 'markmap') {
+        return '<div class="markmap-view"></div>';
+      }
+      return defaultHtml;
+    },
+  },
+});
+```
+
+这里的 `closed` 表示当前 fenced code block 是否已经出现闭合 fence。
+
+如果你希望完全关闭代码高亮，保留普通代码块输出：
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: false,
+});
+```
+
+### 数学公式
+
+数学公式默认开启。
+
+支持的分隔符：
+
+- 行内：`$...$`、`\(...\)`
+- 块级：`$$...$$`、`\[...\]`
 
 ```ts
 import { StreamMarkdownRenderer } from 'incremark-renderer';
@@ -227,7 +286,7 @@ const renderer = new StreamMarkdownRenderer({
 });
 ```
 
-如果你不希望启用数学公式扩展，也可以关闭：
+如果你不希望启用数学公式：
 
 ```ts
 const renderer = new StreamMarkdownRenderer({
@@ -235,144 +294,47 @@ const renderer = new StreamMarkdownRenderer({
 });
 ```
 
-## 自定义容器
+### HTML 安全清洗
 
-现在默认支持 `:::` 容器语法，并会把它解析成独立的块级 token。
-起始行可以写容器类型和可选标题，容器内部仍然可以继续嵌套 Markdown、代码围栏和其他已支持语法。
+默认会对最终 block HTML 做 sanitizer 处理。
+
+主要拦截这类风险：
+
+- 内联事件属性，比如 `onerror`
+- 危险 URL scheme，比如 `javascript:`
+
+只有在 Markdown 输入和所有自定义 HTML hook 都完全可信时，才建议关闭：
 
 ```ts
-import { renderMarkdownToString } from 'incremark-renderer';
-
-const html = renderMarkdownToString(`:::note 快速开始
-这里可以写 **容器内容**。
-:::`);
+const renderer = new StreamMarkdownRenderer({
+  sanitizeHtml: false,
+});
 ```
 
-默认输出结构会带上：
-
-- `.incremark-container`
-- `.incremark-container-{type}`
-- `[data-container-type="{type}"]`
-- `.incremark-container-title`
-- `.incremark-container-content`
-
-如果你希望自己控制外层结构，可以这样自定义渲染：
+如果你希望接入自己的 sanitizer：
 
 ```ts
-import { StreamMarkdownRenderer } from 'incremark-renderer';
-
 const renderer = new StreamMarkdownRenderer({
-  container: {
-    render: ({ type, title, innerHtml }) =>
-      `<aside class="callout callout-${type}">${title ? `<h3>${title}</h3>` : ''}${innerHtml}</aside>`,
+  sanitizeHtml: {
+    sanitizer: (html) => myTrustedSanitizer(html),
   },
 });
 ```
 
-如果你不希望启用 `:::` 容器解析，也可以关闭：
+注意：`container.render`、`highlight.renderHeader`、`highlight.renderBlock`、`renderer.renderBlock()` 返回的 HTML，在默认情况下也仍然会经过 sanitizer。
 
-```ts
-const renderer = new StreamMarkdownRenderer({
-  container: false,
-});
-```
+### 打字机播放
 
-## 代码高亮
-
-带语言标记的 fenced code block 默认会启用语法高亮。
-渲染结果会输出 `hljs`、`language-*` 以及 `incremark-code-language` 相关结构，方便你在应用层自行接入主题样式。
-
-```ts
-import { renderMarkdownToString } from 'incremark-renderer';
-
-const html = renderMarkdownToString('```ts\nconst value = 1;\n```');
-```
-
-如果你希望对没有语言标记的代码块做自动识别，可以这样配置：
-
-```ts
-import { StreamMarkdownRenderer } from 'incremark-renderer';
-
-const renderer = new StreamMarkdownRenderer({
-  highlight: {
-    autoDetect: true,
-    languages: ['javascript', 'typescript', 'json'],
-  },
-});
-```
-
-如果你想关闭语法高亮，保留 `marked` 默认代码块输出：
-
-```ts
-const renderer = new StreamMarkdownRenderer({
-  highlight: false,
-});
-```
-
-如果你想自定义 `incremark-code-block-header` 区域，比如加复制按钮或其他操作按钮：
-
-```ts
-const renderer = new StreamMarkdownRenderer({
-  highlight: {
-    renderHeader: ({ code, defaultHeaderContent }) => {
-      const encoded = encodeURIComponent(code);
-      return `${defaultHeaderContent}<button type="button" class="copy-button" data-copy-code="${encoded}">复制</button>`;
-    },
-  },
-});
-
-root.addEventListener('click', async (event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLButtonElement)) {
-    return;
-  }
-  const encoded = target.dataset.copyCode;
-  if (!encoded) {
-    return;
-  }
-  await navigator.clipboard.writeText(decodeURIComponent(encoded));
-});
-```
-
-如果你希望某些特定语言的代码块走业务自定义渲染，而不是普通代码块输出，可以使用按语言配置的 renderer。比如把 `markmap` 代码块渲染成脑图占位节点：
-
-```ts
-const renderer = new StreamMarkdownRenderer({
-  highlight: {
-    languageRenderers: {
-      markmap: ({ code, language }) =>
-        `<div class="markmap-view" data-language="${language}" data-markmap="${encodeURIComponent(code)}"></div>`,
-    },
-  },
-});
-```
-
-如果你想对所有代码块统一拦截，再按语言自行判断，可以使用 `renderBlock`：
-
-```ts
-const renderer = new StreamMarkdownRenderer({
-  highlight: {
-    renderBlock: ({ declaredLanguage, defaultHtml }) => {
-      if (declaredLanguage === 'markmap') {
-        return '<div class="markmap-view"></div>';
-      }
-      return defaultHtml;
-    },
-  },
-});
-```
-
-## 打字机播放
+如果你已经拿到完整 Markdown，可以使用 `MarkdownTypewriter`：
 
 ```ts
 import {
   IncrementalDomRenderer,
   MarkdownTypewriter,
-  StreamingMarkdownTypewriter,
   TypewriterCursorController,
 } from 'incremark-renderer';
 
-const root = document.getElementById('app')!;
+const root = document.getElementById('app');
 const renderer = new IncrementalDomRenderer(root);
 const cursor = new TypewriterCursorController(root);
 
@@ -399,8 +361,7 @@ const typewriter = new MarkdownTypewriter('# Hello\n\nStreaming markdown.', {
 typewriter.start();
 ```
 
-如果你已经拿到了完整 Markdown，可以使用 `MarkdownTypewriter` 做回放式打字。
-如果是对接真实上游流式输出，请改用 `StreamingMarkdownTypewriter`：
+如果是对接真实流式上游，请使用 `StreamingMarkdownTypewriter`：
 
 ```ts
 import {
@@ -408,7 +369,7 @@ import {
   StreamingMarkdownTypewriter,
 } from 'incremark-renderer';
 
-const root = document.getElementById('app')!;
+const root = document.getElementById('app');
 const renderer = new IncrementalDomRenderer(root);
 const typewriter = new StreamingMarkdownTypewriter({
   onChunk: (chunk) => {
@@ -430,38 +391,292 @@ upstream.on('end', () => {
 });
 ```
 
+## API 参考
+
+### 主要导出
+
+| 导出项 | 类型 | 作用 |
+| --- | --- | --- |
+| `renderMarkdownToString` | function | 全量渲染并返回 HTML |
+| `renderMarkdown` | function | 全量渲染并返回 `{ html, blocks, snapshot }` |
+| `StreamMarkdownRenderer` | class | 与框架无关的增量渲染器 |
+| `IncrementalDomRenderer` | class | 浏览器 DOM 增量渲染器 |
+| `MarkdownTypewriter` | class | 已知完整字符串的打字机回放 |
+| `StreamingMarkdownTypewriter` | class | 实时流式输入的打字机 |
+| `TypewriterCursorController` | class | 浏览器打字光标控制器 |
+| `extractStableBlocks` | function | 底层稳定块检测工具 |
+| `diffAst` | function | 底层 token diff 工具 |
+| `digestTokens` | function | 底层 token 摘要工具 |
+| `createContainerExtension` | function | 高级 `marked` 扩展导出 |
+| `createHighlightExtension` | function | 高级 `marked` 扩展导出 |
+| `createMathExtension` | function | 高级 `marked` 扩展导出 |
+| `createDefaultHtmlSanitizer` | function | 内置 sanitizer 工厂 |
+| `createHtmlSanitizer` | function | 带自定义入口的 sanitizer 工厂 |
+| `DefaultBlockRenderer` | class | 默认 block -> HTML 渲染器 |
+| `wrapBlockHtml` | function | 给 block HTML 包装元数据外层 |
+
+### `StreamMarkdownRenderer`
+
+#### 构造函数
+
+```ts
+new StreamMarkdownRenderer(options?: StreamMarkdownOptions)
+```
+
+#### 方法
+
+| 方法 | 说明 |
+| --- | --- |
+| `append(chunk: string)` | 追加流式 Markdown，并返回 patch |
+| `setMarkdown(markdown: string)` | 用完整文档替换当前状态 |
+| `finalize()` | 在流结束时把剩余 tail 刷出 |
+| `reset()` | 清空内部状态 |
+| `getSnapshot()` | 返回 `{ blocks, stableCount, sourceLength }` |
+| `getBlocks()` | 返回当前可见 blocks |
+| `renderToString()` | 返回当前 HTML 字符串 |
+
+### `IncrementalDomRenderer`
+
+#### 构造函数
+
+```ts
+new IncrementalDomRenderer(root: HTMLElement, options?: StreamMarkdownOptions)
+```
+
+#### 方法
+
+| 方法 | 说明 |
+| --- | --- |
+| `append(chunk: string)` | 直接把流式 patch 应用到 DOM |
+| `setMarkdown(markdown: string)` | 直接用完整文档替换当前 DOM 状态 |
+| `finalize()` | 把剩余 tail 应用到 DOM |
+| `reset()` | 清空状态并清空 root |
+| `getBlocks()` | 返回当前可见 blocks |
+| `renderToString()` | 返回当前 HTML 字符串 |
+
+### `MarkdownTypewriter`
+
+#### 构造函数
+
+```ts
+new MarkdownTypewriter(text: string, options: TypewriterOptions)
+```
+
+#### 方法
+
+| 方法 | 说明 |
+| --- | --- |
+| `start()` | 开始播放 |
+| `pause()` | 暂停播放 |
+| `resume()` | 恢复播放 |
+| `stop()` | 停止播放并重置内部游标 |
+| `isRunning()` | 返回当前是否正在播放 |
+
+### `StreamingMarkdownTypewriter`
+
+#### 构造函数
+
+```ts
+new StreamingMarkdownTypewriter(options: TypewriterOptions)
+```
+
+#### 方法
+
+| 方法 | 说明 |
+| --- | --- |
+| `push(chunk: string)` | 向缓冲区追加上游文本 |
+| `close()` | 标记上游输入已结束 |
+| `isClosed()` | 返回上游是否已结束 |
+| `start()` | 开始播放 |
+| `pause()` | 暂停播放 |
+| `resume()` | 恢复播放 |
+| `stop()` | 停止播放并重置内部游标 |
+| `isRunning()` | 返回当前是否正在播放 |
+
+### `TypewriterCursorController`
+
+#### 构造函数
+
+```ts
+new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOptions)
+```
+
+#### 方法
+
+| 方法 | 说明 |
+| --- | --- |
+| `show()` | 显示光标 |
+| `hide()` | 隐藏光标 |
+| `update()` | 重新计算光标位置 |
+| `destroy()` | 销毁监听和光标 DOM |
+
+## Options 参考
+
+### `StreamMarkdownOptions`
+
+| 选项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `marked` | `MarkedOptions` | `undefined` | 透传给 `marked` 的配置 |
+| `sanitizeHtml` | `HtmlSanitizeOptions \| false` | 开启 | 控制渲染后的 HTML 安全清洗 |
+| `container` | `ContainerOptions \| false` | 开启 | 配置 `:::` 容器，或显式关闭 |
+| `math` | `MathRenderOptions \| false` | 开启 | 配置数学公式，或显式关闭 |
+| `highlight` | `CodeHighlightOptions \| false` | 开启 | 配置代码高亮和代码块自定义渲染 |
+| `renderer` | `BlockRenderer` | `DefaultBlockRenderer` | 覆盖 block -> HTML 渲染逻辑 |
+| `plugins` | `StreamMarkdownPlugin[]` | `[]` | 监听 block 或 patch 的插件机制 |
+
+### `HtmlSanitizeOptions`
+
+| 选项 | 类型 | 说明 |
+| --- | --- | --- |
+| `sanitizer` | `(html: string) => string` | 自定义 sanitizer 函数 |
+
+### `ContainerOptions`
+
+| 选项 | 类型 | 说明 |
+| --- | --- | --- |
+| `render` | `(context: ContainerRenderContext) => string \| null \| undefined` | 自定义容器外层 HTML |
+
+### `ContainerRenderContext`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `type` | `string` | 容器类型 |
+| `info` | `string` | `:::` 后的原始 info 字符串 |
+| `title` | `string \| undefined` | 解析出的可选标题 |
+| `closed` | `boolean` | 当前容器是否已经出现闭合 `:::` |
+| `raw` | `string` | 整个容器块的原始源码 |
+| `text` | `string` | 容器内部的 Markdown 源码 |
+| `innerHtml` | `string` | 默认内层渲染结果 |
+| `defaultClassName` | `string` | 默认 class，例如 `incremark-container incremark-container-note` |
+
+### `CodeHighlightOptions`
+
+| 选项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `autoDetect` | `boolean` | `false` | 是否对未标记语言的 fenced block 做自动识别 |
+| `defaultLanguage` | `string` | `undefined` | 未标记语言时使用的默认语言 |
+| `languages` | `string[]` | `undefined` | 自动识别时的候选语言范围 |
+| `renderHeader` | `CodeBlockHeaderRenderer` | `undefined` | 自定义代码块 header |
+| `renderBlock` | `CodeBlockRenderer` | `undefined` | 自定义整个代码块 HTML |
+| `languageRenderers` | `Record<string, CodeBlockRenderer>` | `undefined` | 按语言分发的代码块 renderer |
+
+### `CodeBlockHeaderRenderContext`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `code` | `string` | 原始代码内容 |
+| `language` | `string \| undefined` | 最终用于渲染的语言 |
+| `declaredLanguage` | `string \| undefined` | fence info string 中声明的语言 |
+| `highlighted` | `boolean` | 是否成功命中高亮 |
+| `closed` | `boolean` | 当前代码块是否已经出现闭合 fence |
+| `defaultHeaderContent` | `string` | 默认语言 badge HTML |
+
+### `CodeBlockRenderContext`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `code` | `string` | 原始代码内容 |
+| `language` | `string \| undefined` | 最终用于渲染的语言 |
+| `declaredLanguage` | `string \| undefined` | fence info string 中声明的语言 |
+| `highlighted` | `boolean` | 是否成功命中高亮 |
+| `closed` | `boolean` | 当前代码块是否已经出现闭合 fence |
+| `defaultHeaderContent` | `string` | 默认语言 badge HTML |
+| `headerHtml` | `string` | 完整默认 header HTML |
+| `bodyHtml` | `string` | 代码内容 HTML |
+| `codeClassName` | `string \| undefined` | 应用于 `<code>` 的 className |
+| `defaultHtml` | `string` | 完整默认代码块 HTML |
+
+### `MathRenderOptions`
+
+| 选项 | 类型 | 说明 |
+| --- | --- | --- |
+| `katex` | `Omit<KatexOptions, 'displayMode'>` | 透传给 KaTeX 的配置 |
+
+### `StreamMarkdownPlugin`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `name` | `string` | 插件名称 |
+| `onBlockParsed` | `(block: StableBlock) => StableBlock \| void` | block 解析和渲染完成后的 hook |
+| `onPatchesComputed` | `(patches: RenderPatch[], snapshot: StreamRendererSnapshot) => void` | patch 计算完成后的 hook |
+
+### `TypewriterOptions`
+
+| 选项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `baseDelayMs` | `number` | `26` | 自适应打字节奏的基础延迟 |
+| `minChunkSize` | `number` | `2` | 每次输出的最小 chunk 大小 |
+| `maxChunkSize` | `number` | `14` | 每次输出的最大 chunk 大小 |
+| `onChunk` | `(chunk, meta) => void` | 必填 | 每次输出 chunk 时触发 |
+| `onComplete` | `(meta) => void` | 空函数 | 播放完成时触发 |
+| `onPause` | `(meta) => void` | 空函数 | 暂停时触发 |
+| `onResume` | `(meta) => void` | 空函数 | 恢复时触发 |
+| `onStart` | `(meta) => void` | 空函数 | 开始时触发 |
+| `onStateChange` | `(meta) => void` | 空函数 | 状态变化时触发 |
+| `onStop` | `(meta) => void` | 空函数 | 停止时触发 |
+
 ### `TypewriterChunkMeta`
 
-`onChunk` 回调里的第二个参数包含：
-
-- `chunk`：当前输出文本片段
-- `chunkSize`：当前片段字符数
-- `delayMs`：下一次输出前的自适应延迟
-- `done`：是否已经输出完成
-- `closed`：上游输入是否已经关闭
-- `inCodeFence`：当前可见输出是否处于 fenced code block 阶段
-- `cursor`：当前输出游标位置
-- `total`：当前总文本长度，或流式模式下当前已缓冲文本长度
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `chunk` | `string` | 当前输出片段 |
+| `chunkSize` | `number` | 当前片段字符数 |
+| `delayMs` | `number` | 下一次输出前的延迟 |
+| `done` | `boolean` | 当前是否已播放完成 |
+| `closed` | `boolean` | 上游输入是否已结束 |
+| `inCodeFence` | `boolean` | 当前可见输出是否处于 fenced code block 内 |
+| `cursor` | `number` | 当前绝对游标位置 |
+| `total` | `number` | 当前总长度，或流式模式下当前已缓冲长度 |
 
 ### `TypewriterEventMeta`
 
-生命周期事件回调会收到 `TypewriterEventMeta`：
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `state` | `TypewriterState` | `idle`、`running`、`paused`、`completed`、`stopped` |
+| `cursor` | `number` | 当前绝对游标位置 |
+| `total` | `number` | 当前总长度，或流式模式下当前已缓冲长度 |
+| `closed` | `boolean` | 上游输入是否已结束 |
+| `inCodeFence` | `boolean` | 当前可见输出是否处于 fenced code block 内 |
+| `lastChunk` | `string \| undefined` | 如果状态变化由一次真实输出触发，这里会带上最后一次 chunk |
 
-- `state`：当前状态，可取 `idle`、`running`、`paused`、`completed`、`stopped`
-- `cursor`：当前输出游标位置
-- `total`：当前总文本长度，或流式模式下当前已缓冲文本长度
-- `closed`：上游输入是否已经结束
-- `inCodeFence`：当前可见输出是否处于 fenced code block 阶段
-- `lastChunk`：如果这次状态变化由一次真实输出触发，这里会携带最后输出的 chunk
+### `TypewriterCursorOptions`
 
-当前支持的打字事件回调：
+| 选项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `className` | `string` | `'incremark-typewriter-cursor'` | 自定义光标 class |
+| `autoScroll` | `boolean` | `true` | 是否自动滚动以保持光标可见 |
 
-- `onStart(meta)`
-- `onPause(meta)`
-- `onResume(meta)`
-- `onStop(meta)`
-- `onComplete(meta)`
-- `onStateChange(meta)`
+## 核心数据结构
+
+### `StableBlock`
+
+| 字段 | 说明 |
+| --- | --- |
+| `key` | block 唯一标识 |
+| `text` | block 原始源码 |
+| `html` | block 渲染后的 HTML |
+| `tokens` | block 对应的 `marked` token 列表 |
+| `digest` | 用于比较结构变化的摘要 |
+| `stable` | 当前 block 是否已经稳定 |
+
+### `RenderPatch`
+
+| 字段 | 说明 |
+| --- | --- |
+| `type` | `insert`、`replace`、`remove` |
+| `key` | block key |
+| `index` | 当前可见 block 的索引 |
+| `block` | 新 block，按场景可选 |
+| `previousBlock` | 旧 block，按场景可选 |
+| `astPatches` | 可选的 token-tree diff 信息 |
+
+### `StreamRendererSnapshot`
+
+| 字段 | 说明 |
+| --- | --- |
+| `blocks` | 当前可见 blocks |
+| `stableCount` | 当前稳定块数量 |
+| `sourceLength` | 当前累计输入长度 |
 
 ## Demo
 
@@ -471,54 +686,22 @@ upstream.on('end', () => {
 npm run demo
 ```
 
-然后打开：
-[http://127.0.0.1:4177/demo/](http://127.0.0.1:4177/demo/)
+然后打开 [http://127.0.0.1:4177/demo/](http://127.0.0.1:4177/demo/)。
 
-当前 demo 页可以验证：
+demo 页面可以直接验证：
 
 - chunk 级流式输入
 - 增量 patch 输出
-- 块快照与稳定块数量
-- 历史消息风格的全量渲染接口
-- 数学公式渲染
-- ChatGPT 风格打字机节奏
-- 打字光标跟随
-- 代码块输出期间光标隐藏
+- block 快照和稳定块数量
+- 打字机播放与光标跟随
+- 代码高亮、自定义容器、数学公式
+- `IncrementalDomRenderer` 驱动的浏览器局部更新
 
-## 设计说明
+## 安全说明
 
-### 1. 稳定块边界检测
-
-当前实现会把输入拆成：
-
-- 已经稳定、不会再变化的前缀块
-- 仍可能继续增长的尾块
-
-只有在块边界足够明确时，块才会进入稳定态，从而避免过早冻结列表、段落或代码块。
-
-### 2. AST / Token Diff
-
-项目基于 `marked` 产出的 token 树生成结构摘要，并在更新时做局部比较。目标不是做一个最复杂的 tree-edit 算法，而是以较低开销快速找出应该被局部替换的块。
-
-### 3. DOM 局部更新
-
-内置 `IncrementalDomRenderer` 会优先在 DOM 结构不变时做文本和属性的原地更新；只有结构变化时，才会替换受影响的 `[data-incremark-block]` 节点。
-
-## 扩展点
-
-你可以通过以下方式扩展：
-
-- 自定义 `renderer.renderBlock(block)`
-- 使用 `plugins`
-- 传入 `marked` 配置
-- 传入 `math.katex` 配置
-- 使用 `TypewriterCursorController` 自定义光标样式与行为
-
-## 说明
-
-- 当前方案优化重点是“流式输入 + 块级增量更新”，不是完整文档级的全局 AST 优化器。
-- 稳定块检测策略偏保守，目的是优先保证流式场景下的正确性与稳定性。
-- demo server 主要用于本地验证，不是生产环境静态资源服务器。
+- 默认启用 sanitizer。
+- 如果关闭 sanitizer，请把 Markdown 输入和所有自定义 HTML hook 都视为“仅可信输入可用”。
+- 业务方返回的自定义 HTML，本身也是安全边界的一部分。
 
 ## 致谢
 

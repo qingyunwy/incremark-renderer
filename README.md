@@ -1,17 +1,50 @@
 # incremark-renderer
 
-`incremark-renderer` is a streaming Markdown rendering package built on top of `marked.js`, with:
+Streaming Markdown renderer for chat UIs, LLM products, and any frontend that needs partial Markdown updates without rerendering the whole document.
 
-- stable block boundary detection inspired by Incremark's incremental parsing approach
-- incremental block lexing without full-document `lexer` reruns
-- AST-aware diffing to generate minimal render patches
-- a DOM renderer that applies partial updates instead of full reflow/repaint
-- a ChatGPT-style markdown typewriter for frontend streaming playback
-- built-in fenced code syntax highlighting powered by `highlight.js`
-- TeX/LaTeX math support for inline and block formulas
-- built-in HTML sanitization for rendered output
+- GitHub: [qingyunwy/incremark-renderer](https://github.com/qingyunwy/incremark-renderer)
+- npm: [incremark-renderer](https://www.npmjs.com/package/incremark-renderer)
+- Chinese documentation: [README.zh-CN.md](./README.zh-CN.md)
 
-Chinese documentation: [README.zh-CN.md](./README.zh-CN.md)
+## What It Is
+
+`incremark-renderer` is a `marked.js`-based Markdown renderer designed for streaming output.
+
+Instead of rerunning the full Markdown lexer and replacing the full DOM on every incoming chunk, it:
+
+- detects stable block boundaries conservatively
+- re-lexes only newly stabilized blocks plus the current mutable tail
+- diffs block token trees and emits block-level patches
+- can apply those patches directly to the browser DOM
+
+It also ships with practical frontend features that are common in LLM products:
+
+- fenced code highlighting via `highlight.js`
+- inline and block math via `katex`
+- `:::` custom container parsing
+- default HTML sanitization for untrusted Markdown
+- ChatGPT-style typewriter playback utilities
+
+## What Problem It Solves
+
+If you render streaming Markdown by calling a full parser on the entire document every time a chunk arrives, you usually hit the same problems:
+
+- performance cost grows with document length
+- unfinished paragraphs, lists, and code fences keep being reparsed
+- DOM gets replaced too aggressively, causing visible flicker
+- business integrations like custom containers or special code blocks become harder to control
+
+`incremark-renderer` is built to solve exactly that class of problem.
+
+## Why Use It
+
+- `marked.js` compatible: stays close to the familiar Markdown ecosystem
+- streaming-first: optimized for append-based rendering
+- safer block stabilization: unfinished content stays in the mutable tail
+- partial DOM updates: unchanged blocks remain mounted
+- customizable: code blocks, containers, sanitization, block rendering, plugins
+- batteries included: highlighting, math, typewriter playback, cursor controller
+- safer defaults: rendered HTML is sanitized by default
 
 ## Install
 
@@ -19,17 +52,21 @@ Chinese documentation: [README.zh-CN.md](./README.zh-CN.md)
 npm install incremark-renderer
 ```
 
-## Highlights
+## Which API Should I Use?
 
-- Uses `marked.js` as the underlying parser while keeping lexing incremental.
-- Re-lexes only newly stabilized blocks and the current mutable tail.
-- Exposes dedicated full-render APIs for history and non-streaming views.
-- Emits block-level render patches so unchanged DOM stays mounted.
-- Highlights fenced code blocks out of the box and emits `hljs` / `language-*` classes.
-- Supports inline math, block math, adaptive typewriter playback, and a DOM cursor controller.
-- Sanitizes rendered HTML by default to strip dangerous raw HTML and URL schemes.
+| Scenario | Recommended API |
+| --- | --- |
+| Real-time streaming Markdown, framework-agnostic | `StreamMarkdownRenderer` |
+| Real-time streaming Markdown directly into the browser DOM | `IncrementalDomRenderer` |
+| Full Markdown string already available, only need HTML | `renderMarkdownToString()` |
+| Full Markdown string already available, also need blocks and snapshot | `renderMarkdown()` |
+| Need typewriter-style playback for a known full string | `MarkdownTypewriter` |
+| Need typewriter-style playback for a live upstream stream | `StreamingMarkdownTypewriter` |
+| Need a cursor that follows the rendered text tail | `TypewriterCursorController` |
 
 ## Quick Start
+
+### 1. Streaming Renderer
 
 ```ts
 import { StreamMarkdownRenderer } from 'incremark-renderer';
@@ -37,18 +74,27 @@ import { StreamMarkdownRenderer } from 'incremark-renderer';
 const renderer = new StreamMarkdownRenderer();
 
 renderer.append('# Hello\n\nThis is');
-renderer.append(' streaming markdown.');
+renderer.append(' streaming Markdown.');
 renderer.finalize();
 
 console.log(renderer.renderToString());
+console.log(renderer.getSnapshot());
 ```
 
-## Full Rendering
+### 2. Browser DOM Rendering
 
-For history views, initial page load, or any scenario where you already have the
-complete Markdown payload, you can use the full-render APIs directly.
+```ts
+import { IncrementalDomRenderer } from 'incremark-renderer';
 
-### Stateless full render
+const root = document.getElementById('app');
+const renderer = new IncrementalDomRenderer(root);
+
+renderer.append('## Title\n\nPart');
+renderer.append('ial paragraph');
+renderer.finalize();
+```
+
+### 3. Full Render
 
 ```ts
 import { renderMarkdownToString } from 'incremark-renderer';
@@ -56,7 +102,7 @@ import { renderMarkdownToString } from 'incremark-renderer';
 const html = renderMarkdownToString('# History\n\nSaved message');
 ```
 
-If you also need block metadata and a snapshot:
+If you also need blocks and snapshot metadata:
 
 ```ts
 import { renderMarkdown } from 'incremark-renderer';
@@ -68,113 +114,162 @@ console.log(result.blocks);
 console.log(result.snapshot);
 ```
 
-### Replace an existing renderer with full content
+## Core Concepts
+
+### Stable Blocks and Tail
+
+The renderer splits content into:
+
+- stable blocks: blocks that are considered complete and will not be re-lexed again
+- tail: the last mutable fragment that may still grow with future chunks
+
+This is the foundation for incremental lexing and patch generation.
+
+### Render Patches
+
+Each update emits block-level patches:
+
+- `insert`: a new visible block appeared
+- `replace`: an existing block changed
+- `remove`: a previous block disappeared
+
+This is useful for framework integrations and direct DOM patching.
+
+## Feature Guide
+
+### Full Rendering vs Streaming
+
+Use `renderMarkdownToString()` or `renderMarkdown()` when the full Markdown payload is already known.
+
+Use `append()` followed by `finalize()` when the Markdown arrives chunk by chunk.
+
+Use `setMarkdown()` if you want to replace the entire current renderer state with a new full document.
+
+### Custom Containers
+
+`:::` containers are supported out of the box.
+
+```ts
+import { renderMarkdownToString } from 'incremark-renderer';
+
+const html = renderMarkdownToString(`:::note Quick Start
+Use **containers** here.
+:::`);
+```
+
+Default output includes:
+
+- `.incremark-container`
+- `.incremark-container-{type}`
+- `[data-container-type="{type}"]`
+- `.incremark-container-title`
+- `.incremark-container-content`
+
+You can customize the output:
 
 ```ts
 import { StreamMarkdownRenderer } from 'incremark-renderer';
 
-const renderer = new StreamMarkdownRenderer();
-renderer.setMarkdown('# Full message\n\nLoaded from history');
-```
-
-`IncrementalDomRenderer` also exposes `setMarkdown(markdown)` for one-shot DOM updates.
-
-## Core APIs
-
-### `StreamMarkdownRenderer`
-
-Framework-agnostic incremental renderer that returns structured patches.
-
-```ts
-import { StreamMarkdownRenderer } from 'incremark-renderer';
-
-const renderer = new StreamMarkdownRenderer();
-const patches = renderer.append('## Title\n\nHello');
-
-console.log(patches);
-console.log(renderer.getSnapshot());
-```
-
-## Browser DOM rendering
-
-```ts
-import { IncrementalDomRenderer } from 'incremark-renderer';
-
-const root = document.getElementById('app')!;
-const renderer = new IncrementalDomRenderer(root);
-
-renderer.append('# Title\n\nPartial');
-renderer.append(' paragraph');
-renderer.finalize();
-```
-
-## HTML Sanitization
-
-Rendered block HTML is sanitized by default before it is returned from
-`renderMarkdownToString()` or mounted by `IncrementalDomRenderer`. This removes
-dangerous inline handlers and URL schemes such as `javascript:` while preserving
-the renderer's own code-block markup, container markup, and MathML output.
-
-Disable sanitization only if both the Markdown input and all custom render hooks
-are fully trusted:
-
-```ts
 const renderer = new StreamMarkdownRenderer({
-  sanitizeHtml: false,
-});
-```
-
-You can also provide a custom sanitizer function:
-
-```ts
-const renderer = new StreamMarkdownRenderer({
-  sanitizeHtml: {
-    sanitizer: (html) => myTrustedSanitizer(html),
+  container: {
+    render: ({ type, title, innerHtml, closed }) =>
+      `<aside class="callout callout-${type}" data-closed="${String(closed)}">${title ? `<h3>${title}</h3>` : ''}${innerHtml}</aside>`,
   },
 });
 ```
 
-### Patch Types
+`closed` tells you whether the current container already has its closing `:::` marker.
 
-`StreamMarkdownRenderer` and `IncrementalDomRenderer` work with three patch kinds:
+Disable container parsing entirely if needed:
 
-- `insert`: a new block became visible
-- `replace`: an existing block changed and should be rerendered
-- `remove`: a previously visible block disappeared
-
-Each patch may also contain `astPatches` describing the token-tree diff for that block.
-
-## Math Formulas
-
-Inline formulas:
-
-```md
-Euler: $e^{i\pi} + 1 = 0$
-Also supported: \(a^2 + b^2 = c^2\)
+```ts
+const renderer = new StreamMarkdownRenderer({
+  container: false,
+});
 ```
 
-Block formulas:
+### Code Blocks and Custom Code Rendering
 
-```md
-$$
-\int_0^1 x^2 \, dx = \frac{1}{3}
-$$
+Explicit-language fenced code blocks are highlighted by default.
 
-\[
-\sum_{k=1}^{n} k = \frac{n(n+1)}{2}
-\]
+```ts
+import { renderMarkdownToString } from 'incremark-renderer';
+
+const html = renderMarkdownToString('```ts\nconst value = 1;\n```');
 ```
 
-Math support is enabled by default and rendered through `katex` using MathML output, so it works in the demo without importing an extra stylesheet.
+Enable auto-detection for untagged fences:
 
-### Math Error Handling
+```ts
+import { StreamMarkdownRenderer } from 'incremark-renderer';
 
-By default, `katex.renderToString` runs with `throwOnError: true`.
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    autoDetect: true,
+    languages: ['javascript', 'typescript', 'json'],
+  },
+});
+```
 
-- If a formula parses successfully, it is rendered as math.
-- If KaTeX throws, the original formula string is rendered back as plain text.
+Customize the header:
 
-You can override KaTeX options through `math.katex`:
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    renderHeader: ({ code, defaultHeaderContent, closed }) => {
+      const encoded = encodeURIComponent(code);
+      return `${defaultHeaderContent}<button type="button" data-copy-code="${encoded}" data-closed="${String(closed)}">Copy</button>`;
+    },
+  },
+});
+```
+
+Render a specific language as a business component instead of a code block:
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    languageRenderers: {
+      markmap: ({ code, language, closed }) =>
+        `<div class="markmap-view" data-language="${language}" data-closed="${String(closed)}" data-markmap="${encodeURIComponent(code)}"></div>`,
+    },
+  },
+});
+```
+
+Or intercept every code block with one generic hook:
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    renderBlock: ({ declaredLanguage, defaultHtml }) => {
+      if (declaredLanguage === 'markmap') {
+        return '<div class="markmap-view"></div>';
+      }
+      return defaultHtml;
+    },
+  },
+});
+```
+
+`closed` tells you whether the current fenced block already has its closing fence.
+
+Disable syntax highlighting entirely if you want plain code block output:
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: false,
+});
+```
+
+### Math
+
+Math is enabled by default.
+
+Supported delimiters:
+
+- inline: `$...$`, `\(...\)`
+- block: `$$...$$`, `\[...\]`
 
 ```ts
 import { StreamMarkdownRenderer } from 'incremark-renderer';
@@ -191,7 +286,7 @@ const renderer = new StreamMarkdownRenderer({
 });
 ```
 
-To disable math handling entirely:
+Disable math completely:
 
 ```ts
 const renderer = new StreamMarkdownRenderer({
@@ -199,149 +294,47 @@ const renderer = new StreamMarkdownRenderer({
 });
 ```
 
-## Custom Containers
+### HTML Sanitization
 
-`:::` containers are supported out of the box and parsed as dedicated block tokens.
-The opening line accepts a container type and an optional title, while the body can
-contain nested Markdown, fenced code blocks, and other supported syntax.
+Rendered block HTML is sanitized by default.
+
+This protects common untrusted-Markdown cases such as:
+
+- inline event handlers like `onerror`
+- dangerous URL schemes like `javascript:`
+
+Disable only if the Markdown input and all custom HTML hooks are fully trusted:
 
 ```ts
-import { renderMarkdownToString } from 'incremark-renderer';
-
-const html = renderMarkdownToString(`:::note Quick Start
-Use **containers** here.
-:::`);
+const renderer = new StreamMarkdownRenderer({
+  sanitizeHtml: false,
+});
 ```
 
-By default the renderer outputs:
-
-- `.incremark-container`
-- `.incremark-container-{type}`
-- `[data-container-type="{type}"]`
-- `.incremark-container-title`
-- `.incremark-container-content`
-
-Customize the wrapper markup if you want your own callout structure:
+Use a custom sanitizer:
 
 ```ts
-import { StreamMarkdownRenderer } from 'incremark-renderer';
-
 const renderer = new StreamMarkdownRenderer({
-  container: {
-    render: ({ type, title, innerHtml }) =>
-      `<aside class="callout callout-${type}">${title ? `<h3>${title}</h3>` : ''}${innerHtml}</aside>`,
+  sanitizeHtml: {
+    sanitizer: (html) => myTrustedSanitizer(html),
   },
 });
 ```
 
-Disable container parsing entirely if needed:
+Important: custom HTML returned by `container.render`, `highlight.renderHeader`, `highlight.renderBlock`, or `renderer.renderBlock()` still goes through sanitization unless you disable it.
 
-```ts
-const renderer = new StreamMarkdownRenderer({
-  container: false,
-});
-```
+### Typewriter Playback
 
-## Code Highlighting
-
-Fenced code blocks with an explicit language info string are highlighted by default.
-The renderer emits `hljs`, `language-*`, and `incremark-code-language` related markup,
-so you can attach your own theme styles in the app layer.
-
-```ts
-import { renderMarkdownToString } from 'incremark-renderer';
-
-const html = renderMarkdownToString('```ts\nconst value = 1;\n```');
-```
-
-To auto-detect untagged fenced blocks or force a default language:
-
-```ts
-import { StreamMarkdownRenderer } from 'incremark-renderer';
-
-const renderer = new StreamMarkdownRenderer({
-  highlight: {
-    autoDetect: true,
-    languages: ['javascript', 'typescript', 'json'],
-  },
-});
-```
-
-Disable syntax highlighting if you want plain `marked` code block output:
-
-```ts
-const renderer = new StreamMarkdownRenderer({
-  highlight: false,
-});
-```
-
-Customize the `incremark-code-block-header` content if you want to add copy
-buttons or other actions:
-
-```ts
-const renderer = new StreamMarkdownRenderer({
-  highlight: {
-    renderHeader: ({ code, defaultHeaderContent }) => {
-      const encoded = encodeURIComponent(code);
-      return `${defaultHeaderContent}<button type="button" class="copy-button" data-copy-code="${encoded}">Copy</button>`;
-    },
-  },
-});
-
-root.addEventListener('click', async (event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLButtonElement)) {
-    return;
-  }
-  const encoded = target.dataset.copyCode;
-  if (!encoded) {
-    return;
-  }
-  await navigator.clipboard.writeText(decodeURIComponent(encoded));
-});
-```
-
-Add language-specific rendering hooks if you want certain fenced blocks to render
-as business components instead of normal code blocks. For example, render
-`markmap` blocks as mind-map placeholders:
-
-```ts
-const renderer = new StreamMarkdownRenderer({
-  highlight: {
-    languageRenderers: {
-      markmap: ({ code, language }) =>
-        `<div class="markmap-view" data-language="${language}" data-markmap="${encodeURIComponent(code)}"></div>`,
-    },
-  },
-});
-```
-
-If you need one generic interception point for all code blocks, use `renderBlock`:
-
-```ts
-const renderer = new StreamMarkdownRenderer({
-  highlight: {
-    renderBlock: ({ declaredLanguage, defaultHtml }) => {
-      if (declaredLanguage === 'markmap') {
-        return '<div class="markmap-view"></div>';
-      }
-      return defaultHtml;
-    },
-  },
-});
-```
-
-## Typewriter Playback
+Use `MarkdownTypewriter` when the full Markdown string is already known:
 
 ```ts
 import {
   IncrementalDomRenderer,
   MarkdownTypewriter,
-  StreamingMarkdownTypewriter,
   TypewriterCursorController,
 } from 'incremark-renderer';
 
-const root = document.getElementById('app')!;
+const root = document.getElementById('app');
 const renderer = new IncrementalDomRenderer(root);
 const cursor = new TypewriterCursorController(root);
 
@@ -351,6 +344,7 @@ const typewriter = new MarkdownTypewriter('# Hello\n\nStreaming markdown.', {
   maxChunkSize: 12,
   onChunk: (chunk, meta) => {
     renderer.append(chunk);
+
     if (meta.inCodeFence) {
       cursor.hide();
     } else {
@@ -367,8 +361,7 @@ const typewriter = new MarkdownTypewriter('# Hello\n\nStreaming markdown.', {
 typewriter.start();
 ```
 
-Use `MarkdownTypewriter` when the full Markdown string is already known. For real
-upstream streaming, use `StreamingMarkdownTypewriter`:
+Use `StreamingMarkdownTypewriter` for a live upstream stream:
 
 ```ts
 import {
@@ -376,7 +369,7 @@ import {
   StreamingMarkdownTypewriter,
 } from 'incremark-renderer';
 
-const root = document.getElementById('app')!;
+const root = document.getElementById('app');
 const renderer = new IncrementalDomRenderer(root);
 const typewriter = new StreamingMarkdownTypewriter({
   onChunk: (chunk) => {
@@ -398,42 +391,296 @@ upstream.on('end', () => {
 });
 ```
 
-### Typewriter Metadata
+## API Reference
 
-Each `onChunk` callback receives `TypewriterChunkMeta`:
+### Main Exports
 
-- `chunk`: the emitted text fragment
-- `chunkSize`: emitted character count
-- `delayMs`: next adaptive delay
-- `done`: whether playback is complete
-- `closed`: whether the source has been fully closed
-- `inCodeFence`: whether the currently visible output is inside a fenced code block
-- `cursor`: current absolute text cursor
-- `total`: current source length or currently buffered source length
+| Export | Type | Purpose |
+| --- | --- | --- |
+| `renderMarkdownToString` | function | Full render to HTML string |
+| `renderMarkdown` | function | Full render to `{ html, blocks, snapshot }` |
+| `StreamMarkdownRenderer` | class | Framework-agnostic incremental renderer |
+| `IncrementalDomRenderer` | class | Browser DOM renderer with partial updates |
+| `MarkdownTypewriter` | class | Typewriter playback for a known full string |
+| `StreamingMarkdownTypewriter` | class | Typewriter playback for a live stream |
+| `TypewriterCursorController` | class | Cursor-follow utility for browser UIs |
+| `extractStableBlocks` | function | Low-level stable block detector |
+| `diffAst` | function | Low-level token diff utility |
+| `digestTokens` | function | Low-level token digest utility |
+| `createContainerExtension` | function | Advanced `marked` extension export |
+| `createHighlightExtension` | function | Advanced `marked` extension export |
+| `createMathExtension` | function | Advanced `marked` extension export |
+| `createDefaultHtmlSanitizer` | function | Built-in sanitizer factory |
+| `createHtmlSanitizer` | function | Sanitizer factory with custom override |
+| `DefaultBlockRenderer` | class | Default block-to-HTML renderer |
+| `wrapBlockHtml` | function | Wrap rendered block HTML with block metadata |
 
-`inCodeFence` is especially useful for hiding cursor effects while code blocks are being streamed.
+### `StreamMarkdownRenderer`
 
-Lifecycle callbacks receive `TypewriterEventMeta`:
+#### Constructor
 
-- `state`: current state (`idle`, `running`, `paused`, `completed`, `stopped`)
-- `cursor`: current absolute text cursor
-- `total`: current source length or currently buffered source length
-- `closed`: whether the source is complete
-- `inCodeFence`: whether the visible output is currently inside a fenced code block
-- `lastChunk`: last emitted chunk when a transition was triggered by output completion
+```ts
+new StreamMarkdownRenderer(options?: StreamMarkdownOptions)
+```
 
-Available callbacks:
+#### Methods
 
-- `onStart(meta)`
-- `onPause(meta)`
-- `onResume(meta)`
-- `onStop(meta)`
-- `onComplete(meta)`
-- `onStateChange(meta)`
+| Method | Description |
+| --- | --- |
+| `append(chunk: string)` | Append streaming Markdown and return render patches |
+| `setMarkdown(markdown: string)` | Replace current state with a complete Markdown document |
+| `finalize()` | Flush the remaining tail when the upstream stream is complete |
+| `reset()` | Clear all internal state |
+| `getSnapshot()` | Return `{ blocks, stableCount, sourceLength }` |
+| `getBlocks()` | Return the current visible blocks |
+| `renderToString()` | Return the current rendered HTML |
+
+### `IncrementalDomRenderer`
+
+#### Constructor
+
+```ts
+new IncrementalDomRenderer(root: HTMLElement, options?: StreamMarkdownOptions)
+```
+
+#### Methods
+
+| Method | Description |
+| --- | --- |
+| `append(chunk: string)` | Apply streaming patches directly to the DOM |
+| `setMarkdown(markdown: string)` | Replace current DOM state with a full document |
+| `finalize()` | Flush the remaining tail into the DOM |
+| `reset()` | Clear renderer state and empty the root node |
+| `getBlocks()` | Return current visible blocks |
+| `renderToString()` | Return current rendered HTML as a string |
+
+### `MarkdownTypewriter`
+
+#### Constructor
+
+```ts
+new MarkdownTypewriter(text: string, options: TypewriterOptions)
+```
+
+#### Methods
+
+| Method | Description |
+| --- | --- |
+| `start()` | Start playback |
+| `pause()` | Pause playback |
+| `resume()` | Resume playback |
+| `stop()` | Stop playback and reset internal cursor |
+| `isRunning()` | Return whether playback is currently active |
+
+### `StreamingMarkdownTypewriter`
+
+#### Constructor
+
+```ts
+new StreamingMarkdownTypewriter(options: TypewriterOptions)
+```
+
+#### Methods
+
+| Method | Description |
+| --- | --- |
+| `push(chunk: string)` | Push upstream text into the typewriter buffer |
+| `close()` | Mark the upstream source as closed |
+| `isClosed()` | Return whether the upstream source is closed |
+| `start()` | Start playback |
+| `pause()` | Pause playback |
+| `resume()` | Resume playback |
+| `stop()` | Stop playback and reset internal cursor |
+| `isRunning()` | Return whether playback is currently active |
+
+### `TypewriterCursorController`
+
+#### Constructor
+
+```ts
+new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOptions)
+```
+
+#### Methods
+
+| Method | Description |
+| --- | --- |
+| `show()` | Show the cursor |
+| `hide()` | Hide the cursor |
+| `update()` | Recalculate cursor position |
+| `destroy()` | Remove listeners and cursor DOM |
+
+## Options Reference
+
+### `StreamMarkdownOptions`
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `marked` | `MarkedOptions` | `undefined` | Pass-through `marked` configuration |
+| `sanitizeHtml` | `HtmlSanitizeOptions \| false` | enabled | Control the post-render HTML sanitizer |
+| `container` | `ContainerOptions \| false` | enabled | Configure `:::` containers or disable them |
+| `math` | `MathRenderOptions \| false` | enabled | Configure math rendering or disable it |
+| `highlight` | `CodeHighlightOptions \| false` | enabled | Configure code block highlighting and custom renderers |
+| `renderer` | `BlockRenderer` | `DefaultBlockRenderer` | Override block-to-HTML rendering |
+| `plugins` | `StreamMarkdownPlugin[]` | `[]` | Observe parsed blocks or emitted patches |
+
+### `HtmlSanitizeOptions`
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `sanitizer` | `(html: string) => string` | Custom sanitizer function |
+
+### `ContainerOptions`
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `render` | `(context: ContainerRenderContext) => string \| null \| undefined` | Custom container HTML renderer |
+
+### `ContainerRenderContext`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | `string` | Container type from the opening line |
+| `info` | `string` | Raw info string after `:::` |
+| `title` | `string \| undefined` | Optional parsed title |
+| `closed` | `boolean` | Whether the closing `:::` marker is already present |
+| `raw` | `string` | Raw source for the whole container block |
+| `text` | `string` | Inner Markdown source |
+| `innerHtml` | `string` | Default rendered inner HTML |
+| `defaultClassName` | `string` | Built-in class name such as `incremark-container incremark-container-note` |
+
+### `CodeHighlightOptions`
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `autoDetect` | `boolean` | `false` | Auto-detect language for fences without a declared language |
+| `defaultLanguage` | `string` | `undefined` | Fallback language when the fence has no language |
+| `languages` | `string[]` | `undefined` | Restrict auto-detection candidates |
+| `renderHeader` | `CodeBlockHeaderRenderer` | `undefined` | Customize the code block header |
+| `renderBlock` | `CodeBlockRenderer` | `undefined` | Customize full code block HTML |
+| `languageRenderers` | `Record<string, CodeBlockRenderer>` | `undefined` | Per-language code block renderers |
+
+### `CodeBlockHeaderRenderContext`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `code` | `string` | Raw code block content |
+| `language` | `string \| undefined` | Final language used for rendering |
+| `declaredLanguage` | `string \| undefined` | Language declared in the fence info string |
+| `highlighted` | `boolean` | Whether syntax highlighting succeeded |
+| `closed` | `boolean` | Whether the closing code fence is already present |
+| `defaultHeaderContent` | `string` | Built-in language badge HTML |
+
+### `CodeBlockRenderContext`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `code` | `string` | Raw code block content |
+| `language` | `string \| undefined` | Final language used for rendering |
+| `declaredLanguage` | `string \| undefined` | Language declared in the fence info string |
+| `highlighted` | `boolean` | Whether syntax highlighting succeeded |
+| `closed` | `boolean` | Whether the closing code fence is already present |
+| `defaultHeaderContent` | `string` | Built-in language badge HTML |
+| `headerHtml` | `string` | Full built-in header HTML |
+| `bodyHtml` | `string` | Rendered code HTML |
+| `codeClassName` | `string \| undefined` | Final class name applied to `<code>` |
+| `defaultHtml` | `string` | Full built-in code block HTML |
+
+### `MathRenderOptions`
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `katex` | `Omit<KatexOptions, 'displayMode'>` | KaTeX options for both inline and block math |
+
+### `StreamMarkdownPlugin`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | `string` | Plugin name |
+| `onBlockParsed` | `(block: StableBlock) => StableBlock \| void` | Hook after a block is parsed and rendered |
+| `onPatchesComputed` | `(patches: RenderPatch[], snapshot: StreamRendererSnapshot) => void` | Hook after patches are computed |
+
+### `TypewriterOptions`
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `baseDelayMs` | `number` | `26` | Base delay used for adaptive playback |
+| `minChunkSize` | `number` | `2` | Minimum emitted chunk size |
+| `maxChunkSize` | `number` | `14` | Maximum emitted chunk size |
+| `onChunk` | `(chunk, meta) => void` | required | Called for every emitted chunk |
+| `onComplete` | `(meta) => void` | no-op | Called when playback completes |
+| `onPause` | `(meta) => void` | no-op | Called when playback pauses |
+| `onResume` | `(meta) => void` | no-op | Called when playback resumes |
+| `onStart` | `(meta) => void` | no-op | Called when playback starts |
+| `onStateChange` | `(meta) => void` | no-op | Called whenever the state changes |
+| `onStop` | `(meta) => void` | no-op | Called when playback stops |
+
+### `TypewriterChunkMeta`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `chunk` | `string` | Emitted text fragment |
+| `chunkSize` | `number` | Emitted character count |
+| `delayMs` | `number` | Next adaptive delay |
+| `done` | `boolean` | Whether playback is complete |
+| `closed` | `boolean` | Whether the upstream source is closed |
+| `inCodeFence` | `boolean` | Whether the current visible output is inside a fenced code block |
+| `cursor` | `number` | Current absolute text cursor |
+| `total` | `number` | Current source length or buffered source length |
+
+### `TypewriterEventMeta`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `state` | `TypewriterState` | `idle`, `running`, `paused`, `completed`, or `stopped` |
+| `cursor` | `number` | Current absolute text cursor |
+| `total` | `number` | Current source length or buffered source length |
+| `closed` | `boolean` | Whether the upstream source is closed |
+| `inCodeFence` | `boolean` | Whether the current visible output is inside a fenced code block |
+| `lastChunk` | `string \| undefined` | Last emitted chunk if the transition was triggered by output |
+
+### `TypewriterCursorOptions`
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `className` | `string` | `'incremark-typewriter-cursor'` | Custom cursor class name |
+| `autoScroll` | `boolean` | `true` | Auto-scroll the container to keep the cursor visible |
+
+## Core Data Structures
+
+### `StableBlock`
+
+| Field | Description |
+| --- | --- |
+| `key` | Stable block identifier |
+| `text` | Raw block source |
+| `html` | Rendered HTML |
+| `tokens` | `marked` token list for the block |
+| `digest` | Structural digest used for comparisons |
+| `stable` | Whether the block is already stabilized |
+
+### `RenderPatch`
+
+| Field | Description |
+| --- | --- |
+| `type` | `insert`, `replace`, or `remove` |
+| `key` | Block key |
+| `index` | Visible block index |
+| `block` | Next block when applicable |
+| `previousBlock` | Previous block when applicable |
+| `astPatches` | Optional token-tree diff metadata |
+
+### `StreamRendererSnapshot`
+
+| Field | Description |
+| --- | --- |
+| `blocks` | Current visible blocks |
+| `stableCount` | Number of stabilized blocks |
+| `sourceLength` | Total accumulated source length |
 
 ## Demo
 
-Run a local verification page:
+Run the local demo page:
 
 ```bash
 npm run demo
@@ -441,58 +688,21 @@ npm run demo
 
 Then open [http://127.0.0.1:4177/demo/](http://127.0.0.1:4177/demo/).
 
-The demo page shows:
+The demo shows:
 
-- chunk-by-chunk Markdown streaming input
-- ChatGPT-style adaptive typewriter playback
-- typewriter cursor follow behavior
-- hidden cursor while fenced code blocks are streaming
-- inline and block math rendering
-- emitted incremental patches
-- current block snapshot and stable block count
-- live DOM output rendered by `IncrementalDomRenderer`
+- chunk-by-chunk Markdown streaming
+- incremental patch output
+- block snapshots and stable block counts
+- typewriter playback and cursor following
+- code highlighting, custom containers, and math rendering
+- browser DOM updates driven by `IncrementalDomRenderer`
 
-## Design
+## Security Notes
 
-### 1. Stable block boundary detection
-
-The package continuously scans only the mutable tail and advances the stable prefix when a block is unquestionably complete. Fenced code blocks, headings, setext headings, and blank-line-delimited blocks are handled explicitly so unfinished content stays in the tail for the next incremental pass.
-
-### 2. Incremental lexer pipeline
-
-Stable blocks are lexed exactly once with `marked.lexer`. Only two regions are ever lexed again:
-
-- newly stabilized blocks produced from the current tail
-- the current mutable tail block
-
-This keeps lexing cost bounded in high-frequency streaming scenarios.
-
-### 3. AST diff and local rerender
-
-Each block stores the `marked` token tree and a structural digest. On each update, the renderer compares previous and next ASTs and emits render patches:
-
-- `insert` for new blocks
-- `replace` for changed AST subtrees
-- `remove` for blocks that disappear after finalization or reset flows
-
-The built-in DOM renderer applies those patches to `[data-incremark-block]` wrappers and, when the DOM shape stays the same, updates text and attributes in place before falling back to full block replacement.
-
-## Extensibility
-
-You can provide:
-
-- `renderer.renderBlock(block)` to override block-to-HTML rendering
-- `plugins` to inspect parsed blocks or emitted patches
-- `marked` options to customize tokenization/rendering behavior while preserving `marked.js` compatibility
-- `math.katex` to customize KaTeX rendering behavior
-- `TypewriterCursorController` to build cursor-following playback UIs
-
-## Notes
-
-- The package is optimized around block-level incremental rendering rather than full-document AST reconciliation.
-- Stable boundary detection is intentionally conservative for streaming safety, especially around paragraphs and fenced blocks.
-- The demo server is for local verification and is not intended to be used as a production asset server.
+- Sanitization is enabled by default.
+- If you disable sanitization, treat all Markdown and custom HTML hooks as trusted-only.
+- If you return custom HTML from render hooks, that HTML is part of your security boundary.
 
 ## Acknowledgements
 
-This project's stable block boundary detection approach references the ideas from the open source project [kingshuaishuai/incremark](https://github.com/kingshuaishuai/incremark).
+The stable block boundary detection approach in this project references ideas from the open source project [kingshuaishuai/incremark](https://github.com/kingshuaishuai/incremark).
