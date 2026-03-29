@@ -65,6 +65,8 @@ export interface CodeBlockRenderContext {
   declaredLanguage?: string;
   highlighted: boolean;
   closed: boolean;
+  lineNumbersEnabled: boolean;
+  lineCount: number;
   defaultHeaderContent: string;
   headerHtml: string;
   bodyHtml: string;
@@ -113,6 +115,7 @@ export interface CodeHighlightOptions {
   autoDetect?: boolean;
   defaultLanguage?: string;
   languages?: string[];
+  showLineNumbers?: boolean;
   renderHeader?: CodeBlockHeaderRenderer;
   renderBlock?: CodeBlockRenderer;
   languageRenderers?: Record<string, CodeBlockRenderer>;

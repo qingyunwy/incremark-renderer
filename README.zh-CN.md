@@ -290,6 +290,16 @@ const renderer = new StreamMarkdownRenderer({
 });
 ```
 
+如果你希望内置代码块默认显示左侧行号：
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    showLineNumbers: true,
+  },
+});
+```
+
 自定义代码块 header：
 
 ```ts
@@ -715,6 +725,7 @@ new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOpti
 | `autoDetect` | `boolean` | `false` | 是否对未标记语言的 fenced block 做自动识别 |
 | `defaultLanguage` | `string` | `undefined` | 未标记语言时使用的默认语言 |
 | `languages` | `string[]` | `undefined` | 自动识别时的候选语言范围 |
+| `showLineNumbers` | `boolean` | `false` | 是否让内置代码块输出左侧行号 gutter |
 | `renderHeader` | `CodeBlockHeaderRenderer` | `undefined` | 自定义代码块 header |
 | `renderBlock` | `CodeBlockRenderer` | `undefined` | 自定义整个代码块 HTML |
 | `languageRenderers` | `Record<string, CodeBlockRenderer>` | `undefined` | 按语言分发的代码块 renderer |
@@ -739,6 +750,8 @@ new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOpti
 | `declaredLanguage` | `string \| undefined` | fence info string 中声明的语言 |
 | `highlighted` | `boolean` | 是否成功命中高亮 |
 | `closed` | `boolean` | 当前代码块是否已经出现闭合 fence |
+| `lineNumbersEnabled` | `boolean` | 当前代码块是否启用了内置行号 |
+| `lineCount` | `number` | 当前代码块可见行数 |
 | `defaultHeaderContent` | `string` | 默认语言 badge HTML |
 | `headerHtml` | `string` | 完整默认 header HTML |
 | `bodyHtml` | `string` | 代码内容 HTML |

@@ -12,6 +12,25 @@ const sampleMarkdown = `# Incremark Renderer
 
 这是一个用于验证增量 Markdown 渲染效果的 demo。
 
+\`\`\`ts
+function renderLineNumberGutter(code: string): { html: string; lineCount: number } {
+  const lineCount = splitDisplayLines(code).length;
+  const rows: string[] = [];
+
+  for (let index = 0; index < lineCount; index += 1) {
+    const lineNumber = index + 1;
+    rows.push(
+      \`<span class="incremark-code-line-number" data-line-number="\${lineNumber}" aria-hidden="true">\${lineNumber}</span>\`,
+    );
+  }
+
+  return {
+    html: rows.join(''),
+    lineCount,
+  };
+}
+\`\`\`
+
 行内公式示例：$E = mc^2$，以及 \\(a^2 + b^2 = c^2\\)。
 
 ## Feature Checklist
@@ -170,6 +189,7 @@ function createDemoRendererOptions() {
       render: renderDemoContainer,
     },
     highlight: {
+      showLineNumbers: true,
       renderHeader: ({ code, defaultHeaderContent }) => {
         const encodedCode = encodeURIComponent(code);
         return `${defaultHeaderContent}<button type="button" class="incremark-code-action" data-copy-code="${encodedCode}">Copy</button>`;

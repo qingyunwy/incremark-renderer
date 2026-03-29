@@ -598,6 +598,24 @@ function normalizeCodeText(value) {
 function normalizeLanguage(value) {
   return value?.trim().match(INFO_LANGUAGE_RE)?.[0];
 }
+function splitDisplayLines(value) {
+  const trimmed = value.replace(TRAILING_NEWLINE_RE, "");
+  return trimmed ? trimmed.split("\n") : [""];
+}
+function renderLineNumberGutter(code) {
+  const lineCount = splitDisplayLines(code).length;
+  const rows = [];
+  for (let index = 0; index < lineCount; index += 1) {
+    const lineNumber = index + 1;
+    rows.push(
+      `<span class="incremark-code-line-number" data-line-number="${lineNumber}" aria-hidden="true">${lineNumber}</span>`
+    );
+  }
+  return {
+    html: rows.join(""),
+    lineCount
+  };
+}
 function isCodeBlockClosed(token) {
   const firstLineEnd = token.raw.indexOf("\n");
   if (firstLineEnd === -1) {
@@ -682,7 +700,10 @@ function resolveLanguageRenderer(renderers, declaredLanguage, language) {
 function renderCodeBlock(options) {
   const header = renderCodeBlockHeader(options);
   const classAttribute = options.codeClassName ? ` class="${options.codeClassName}"` : "";
-  const defaultHtml = `<div class="incremark-code-block"${buildWrapperAttributes(options.language)}>${header.headerHtml}<pre><code${classAttribute}>${options.bodyHtml}</code></pre></div>
+  const lineNumberGutter = renderLineNumberGutter(options.code);
+  const defaultBodyHtml = options.lineNumbersEnabled ? `<span class="incremark-code-grid"><span class="incremark-code-gutter">${lineNumberGutter.html}</span><span class="incremark-code-content">${options.bodyHtml}</span></span>` : options.bodyHtml;
+  const preClassAttribute = options.lineNumbersEnabled ? ' class="incremark-code-pre-with-lines"' : "";
+  const defaultHtml = `<div class="incremark-code-block"${buildWrapperAttributes(options.language)}>${header.headerHtml}<pre${preClassAttribute}><code${classAttribute}>${defaultBodyHtml}</code></pre></div>
 `;
   const context = {
     code: options.code,
@@ -690,6 +711,8 @@ function renderCodeBlock(options) {
     declaredLanguage: options.declaredLanguage,
     highlighted: options.highlighted,
     closed: options.closed,
+    lineNumbersEnabled: options.lineNumbersEnabled,
+    lineCount: lineNumberGutter.lineCount,
     defaultHeaderContent: header.defaultHeaderContent,
     headerHtml: header.headerHtml,
     bodyHtml: options.bodyHtml,
@@ -742,6 +765,7 @@ function createHighlightExtension(options = {}, runtime = {}) {
               highlighted: true,
               closed: codeToken.closed,
               language: configuredLanguage,
+              lineNumbersEnabled: options.showLineNumbers === true,
               languageRenderers,
               renderBlock: options.renderBlock,
               renderHeader: options.renderHeader
@@ -758,6 +782,7 @@ function createHighlightExtension(options = {}, runtime = {}) {
                 highlighted: true,
                 closed: codeToken.closed,
                 language: result.language,
+                lineNumbersEnabled: options.showLineNumbers === true,
                 languageRenderers,
                 renderBlock: options.renderBlock,
                 renderHeader: options.renderHeader
@@ -776,6 +801,7 @@ function createHighlightExtension(options = {}, runtime = {}) {
           highlighted: false,
           closed: codeToken.closed,
           language: configuredLanguage,
+          lineNumbersEnabled: options.showLineNumbers === true,
           languageRenderers,
           renderBlock: options.renderBlock,
           renderHeader: options.renderHeader

@@ -33,6 +33,28 @@ function normalizeLanguage(value?: string): string | undefined {
   return value?.trim().match(INFO_LANGUAGE_RE)?.[0];
 }
 
+function splitDisplayLines(value: string): string[] {
+  const trimmed = value.replace(TRAILING_NEWLINE_RE, '');
+  return trimmed ? trimmed.split('\n') : [''];
+}
+
+function renderLineNumberGutter(code: string): { html: string; lineCount: number } {
+  const lineCount = splitDisplayLines(code).length;
+  const rows: string[] = [];
+
+  for (let index = 0; index < lineCount; index += 1) {
+    const lineNumber = index + 1;
+    rows.push(
+      `<span class="incremark-code-line-number" data-line-number="${lineNumber}" aria-hidden="true">${lineNumber}</span>`,
+    );
+  }
+
+  return {
+    html: rows.join(''),
+    lineCount,
+  };
+}
+
 function isCodeBlockClosed(token: Tokens.Code): boolean {
   const firstLineEnd = token.raw.indexOf('\n');
   if (firstLineEnd === -1) {
@@ -158,6 +180,7 @@ function renderCodeBlock(
     highlighted: boolean;
     closed: boolean;
     language?: string;
+    lineNumbersEnabled: boolean;
     renderBlock?: CodeHighlightOptions['renderBlock'];
     renderHeader?: CodeHighlightOptions['renderHeader'];
     languageRenderers?: Record<string, CodeBlockRenderer>;
@@ -165,13 +188,20 @@ function renderCodeBlock(
 ): string {
   const header = renderCodeBlockHeader(options);
   const classAttribute = options.codeClassName ? ` class="${options.codeClassName}"` : '';
-  const defaultHtml = `<div class="incremark-code-block"${buildWrapperAttributes(options.language)}>${header.headerHtml}<pre><code${classAttribute}>${options.bodyHtml}</code></pre></div>\n`;
+  const lineNumberGutter = renderLineNumberGutter(options.code);
+  const defaultBodyHtml = options.lineNumbersEnabled
+    ? `<span class="incremark-code-grid"><span class="incremark-code-gutter">${lineNumberGutter.html}</span><span class="incremark-code-content">${options.bodyHtml}</span></span>`
+    : options.bodyHtml;
+  const preClassAttribute = options.lineNumbersEnabled ? ' class="incremark-code-pre-with-lines"' : '';
+  const defaultHtml = `<div class="incremark-code-block"${buildWrapperAttributes(options.language)}>${header.headerHtml}<pre${preClassAttribute}><code${classAttribute}>${defaultBodyHtml}</code></pre></div>\n`;
   const context: CodeBlockRenderContext = {
     code: options.code,
     language: options.language,
     declaredLanguage: options.declaredLanguage,
     highlighted: options.highlighted,
     closed: options.closed,
+    lineNumbersEnabled: options.lineNumbersEnabled,
+    lineCount: lineNumberGutter.lineCount,
     defaultHeaderContent: header.defaultHeaderContent,
     headerHtml: header.headerHtml,
     bodyHtml: options.bodyHtml,
@@ -238,6 +268,7 @@ export function createHighlightExtension(
               highlighted: true,
               closed: codeToken.closed,
               language: configuredLanguage,
+              lineNumbersEnabled: options.showLineNumbers === true,
               languageRenderers,
               renderBlock: options.renderBlock,
               renderHeader: options.renderHeader,
@@ -255,6 +286,7 @@ export function createHighlightExtension(
                 highlighted: true,
                 closed: codeToken.closed,
                 language: result.language,
+                lineNumbersEnabled: options.showLineNumbers === true,
                 languageRenderers,
                 renderBlock: options.renderBlock,
                 renderHeader: options.renderHeader,
@@ -278,6 +310,7 @@ export function createHighlightExtension(
           highlighted: false,
           closed: codeToken.closed,
           language: configuredLanguage,
+          lineNumbersEnabled: options.showLineNumbers === true,
           languageRenderers,
           renderBlock: options.renderBlock,
           renderHeader: options.renderHeader,

@@ -122,6 +122,21 @@ test('renderMarkdownToString can customize code block header actions', () => {
   assert.match(html, /data-highlighted="true"/);
 });
 
+test('renderMarkdownToString can show left-side line numbers for code blocks', () => {
+  const html = renderMarkdownToString('```ts\nconst value = 1;\nconsole.log(value);\n```', {
+    highlight: {
+      showLineNumbers: true,
+    },
+  });
+
+  assert.match(html, /class="incremark-code-pre-with-lines"/);
+  assert.match(html, /class="incremark-code-grid"/);
+  assert.match(html, /class="incremark-code-gutter"/);
+  assert.match(html, /class="incremark-code-line-number" data-line-number="1" aria-hidden="true">1<\/span>/);
+  assert.match(html, /class="incremark-code-line-number" data-line-number="2" aria-hidden="true">2<\/span>/);
+  assert.match(html, /class="incremark-code-content"><span class="hljs-keyword">const<\/span>/);
+});
+
 test('renderMarkdownToString exposes closed=true to code block header renderers', () => {
   const html = renderMarkdownToString('```ts\nconst value = 1;\n```', {
     highlight: {
@@ -135,12 +150,26 @@ test('renderMarkdownToString exposes closed=true to code block header renderers'
 test('renderMarkdownToString exposes closed=false to unfinished code block renderers', () => {
   const html = renderMarkdownToString('```ts\nconst value = 1;\n', {
     highlight: {
-      renderBlock: ({ closed, bodyHtml }) =>
-        `<div class="code-shell" data-closed="${String(closed)}"><pre><code>${bodyHtml}</code></pre></div>`,
+      renderBlock: ({ closed, bodyHtml, lineNumbersEnabled, lineCount }) =>
+        `<div class="code-shell" data-closed="${String(closed)}" data-line-numbers="${String(lineNumbersEnabled)}" data-line-count="${lineCount}"><pre><code>${bodyHtml}</code></pre></div>`,
     },
   });
 
-  assert.match(html, /<div class="code-shell" data-closed="false"><pre><code>/);
+  assert.match(html, /<div class="code-shell" data-closed="false" data-line-numbers="false" data-line-count="1"><pre><code>/);
+});
+
+test('renderMarkdownToString exposes line number metadata to code block renderers', () => {
+  const html = renderMarkdownToString('```ts\nconst value = 1;\nconsole.log(value);\n```', {
+    highlight: {
+      showLineNumbers: true,
+      renderBlock: ({ lineNumbersEnabled, lineCount, defaultHtml }) =>
+        `<div class="code-shell" data-line-numbers="${String(lineNumbersEnabled)}" data-line-count="${lineCount}">${defaultHtml}</div>`,
+    },
+  });
+
+  assert.match(html, /<div class="code-shell" data-line-numbers="true" data-line-count="2">/);
+  assert.match(html, /class="incremark-code-grid"/);
+  assert.match(html, /class="incremark-code-line-number" data-line-number="2" aria-hidden="true">2<\/span>/);
 });
 
 test('renderMarkdownToString can render custom code block header without a language badge', () => {

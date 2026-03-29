@@ -290,6 +290,16 @@ const renderer = new StreamMarkdownRenderer({
 });
 ```
 
+Show line numbers in the built-in code block output:
+
+```ts
+const renderer = new StreamMarkdownRenderer({
+  highlight: {
+    showLineNumbers: true,
+  },
+});
+```
+
 Customize the header:
 
 ```ts
@@ -715,6 +725,7 @@ new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOpti
 | `autoDetect` | `boolean` | `false` | Auto-detect language for fences without a declared language |
 | `defaultLanguage` | `string` | `undefined` | Fallback language when the fence has no language |
 | `languages` | `string[]` | `undefined` | Restrict auto-detection candidates |
+| `showLineNumbers` | `boolean` | `false` | Render built-in code blocks with a left-side line number gutter |
 | `renderHeader` | `CodeBlockHeaderRenderer` | `undefined` | Customize the code block header |
 | `renderBlock` | `CodeBlockRenderer` | `undefined` | Customize full code block HTML |
 | `languageRenderers` | `Record<string, CodeBlockRenderer>` | `undefined` | Per-language code block renderers |
@@ -739,6 +750,8 @@ new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOpti
 | `declaredLanguage` | `string \| undefined` | Language declared in the fence info string |
 | `highlighted` | `boolean` | Whether syntax highlighting succeeded |
 | `closed` | `boolean` | Whether the closing code fence is already present |
+| `lineNumbersEnabled` | `boolean` | Whether built-in line numbers are enabled for this block |
+| `lineCount` | `number` | Visible line count in the current rendered code block |
 | `defaultHeaderContent` | `string` | Built-in language badge HTML |
 | `headerHtml` | `string` | Full built-in header HTML |
 | `bodyHtml` | `string` | Rendered code HTML |
