@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>incremark-renderer vs markstream-vue</title>
+    <link rel="stylesheet" href="/demo/style.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/markstream-vue@0.0.9-beta.0/dist/index.css" />
+    <link rel="stylesheet" href="/demo/markstream-compare.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "incremark-renderer": "/dist/index.js",
+          "highlight.js": "/demo/vendor/highlight.js",
+          "katex": "/demo/vendor/katex.js",
+          "marked": "/demo/vendor/marked.js",
+          "xss": "/demo/vendor/xss.js",
+          "vue": "https://esm.sh/vue@3.5.13",
+          "markstream-vue": "https://esm.sh/markstream-vue@0.0.9-beta.0?external=vue"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <p class="eyebrow">Streaming Benchmark</p>
+        <h1>incremark-renderer vs markstream-vue</h1>
+        <p class="lede">
+          独立对比页：同一份 Markdown 输入、同一组 chunk 配置下，同时观察两套流式渲染结果，并统计多轮 benchmark 数据。
+        </p>
+      </section>
+
+      <section class="controls card">
+        <div class="compare-runtime-note" id="runtime-note">
+          正在加载 markstream-vue 运行时...
+        </div>
+
+        <label class="field">
+          <span>Markdown 样例</span>
+          <textarea id="source-input"></textarea>
+        </label>
+
+        <div class="toolbar compare-toolbar">
+          <label class="field compact">
+            <span>每次 chunk 大小</span>
+            <input id="chunk-size" type="number" min="1" value="24" />
+          </label>
+          <label class="field compact">
+            <span>自动播放间隔（ms）</span>
+            <input id="play-interval" type="number" min="8" step="2" value="20" />
+          </label>
+          <label class="field compact">
+            <span>性能测试轮次</span>
+            <input id="benchmark-runs" type="number" min="1" max="24" value="10" />
+          </label>
+          <button id="reset-button" type="button">重置</button>
+          <button id="step-button" type="button">追加一段</button>
+          <button id="play-button" type="button">自动播放</button>
+          <button id="benchmark-button" type="button">运行性能对比</button>
+        </div>
+
+        <div class="status-grid">
+          <article class="stat">
+            <span class="stat-label">已消费字符</span>
+            <strong id="consumed-value">0</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">已发送 chunk</span>
+            <strong id="chunk-count-value">0</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">incremark 平均总耗时</span>
+            <strong id="benchmark-incremark-value">--</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">markstream 平均总耗时</span>
+            <strong id="benchmark-markstream-value">--</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">速度比</span>
+            <strong id="benchmark-speedup-value">--</strong>
+          </article>
+        </div>
+
+        <p class="compare-note">
+          这个对比页聚焦“核心流式 Markdown 渲染”路径。
+          <code>markstream-vue</code> 使用官方推荐的
+          <code>&lt;MarkdownRender :content="..." /&gt;</code> 流式方式，并启用
+          <code>renderCodeBlocksAsPre</code> 轻量代码块模式；<code>incremark-renderer</code> 使用
+          <code>IncrementalDomRenderer</code>，
+          并关闭高亮、数学公式和自定义容器，尽量减少非同类特性的干扰。
+        </p>
+      </section>
+
+      <section class="grid compare-grid">
+        <article class="card">
+          <div class="compare-panel-head">
+            <h2>incremark-renderer</h2>
+            <span class="compare-badge">IncrementalDomRenderer</span>
+          </div>
+          <div id="incremark-root" class="panel preview compare-preview"></div>
+        </article>
+
+        <article class="card">
+          <div class="compare-panel-head">
+            <h2>markstream-vue</h2>
+            <span class="compare-badge">MarkdownRender</span>
+          </div>
+          <div id="markstream-root" class="panel preview compare-preview compare-markstream-root"></div>
+        </article>
+      </section>
+
+      <section class="grid compare-grid">
+        <article class="card">
+          <h2>结果摘要</h2>
+          <pre id="benchmark-summary" class="panel code"></pre>
+        </article>
+
+        <article class="card">
+          <h2>轮次明细</h2>
+          <pre id="benchmark-log" class="panel code"></pre>
+        </article>
+      </section>
+    </main>
+
+    <div id="benchmark-sandbox" class="benchmark-sandbox" aria-hidden="true"></div>
+
+    <script type="module" src="/demo/markstream-compare.js"></script>
+  </body>
+</html>

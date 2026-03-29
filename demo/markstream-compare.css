@@ -1,0 +1,76 @@
+.compare-runtime-note {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(34, 125, 112, 0.2);
+  border-radius: 18px;
+  background: rgba(34, 125, 112, 0.1);
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+.compare-toolbar {
+  align-items: flex-end;
+}
+
+.compare-note {
+  margin: 16px 0 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.compare-grid {
+  margin-top: 18px;
+}
+
+.compare-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.compare-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.7rem;
+  border: 1px solid rgba(196, 91, 45, 0.16);
+  border-radius: 999px;
+  background: rgba(196, 91, 45, 0.12);
+  color: var(--accent);
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.compare-preview {
+  min-height: 460px;
+}
+
+.compare-markstream-root {
+  overflow: auto;
+}
+
+.compare-markstream-root .markstream-vue {
+  color: var(--ink);
+}
+
+.compare-markstream-root pre {
+  overflow: auto;
+}
+
+.compare-benchmark-root {
+  min-height: 0;
+}
+
+.compare-benchmark-root .markstream-vue {
+  color: var(--ink);
+}
+
+@media (max-width: 720px) {
+  .compare-panel-head {
+    align-items: flex-start;
+  }
+}
