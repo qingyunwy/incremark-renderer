@@ -182,6 +182,48 @@ console.log(result.snapshot);
 
 如果你想把一个已有 renderer 的内容一次性替换成新文档，请用 `setMarkdown()`。
 
+### 自定义 `marked` renderer
+
+`StreamMarkdownOptions.marked` 会原样透传给内部的 `marked` 实例。
+
+这意味着你可以继续使用 `marked` 原生的 `renderer`、`tokenizer`、`hooks` 等扩展点，同时保留当前库的增量渲染能力。
+
+例如，下面这个例子会自定义 link 节点的输出：
+
+```ts
+import { StreamMarkdownRenderer } from 'incremark-renderer';
+
+const renderer = new StreamMarkdownRenderer({
+  marked: {
+    renderer: {
+      link(token) {
+        return `<a data-href="${token.href}">${token.text || token.href}</a>`;
+      },
+    },
+  },
+});
+```
+
+同样的配置形式也适用于浏览器侧 API：
+
+```ts
+import { StreamingMarkdownController } from 'incremark-renderer';
+
+const controller = new StreamingMarkdownController(root, {
+  renderer: {
+    marked: {
+      renderer: {
+        link(token) {
+          return `<a data-href="${token.href}">${token.text || token.href}</a>`;
+        },
+      },
+    },
+  },
+});
+```
+
+需要注意的是，只要没有显式关闭或替换 `sanitizeHtml`，渲染后的 HTML 仍然会经过内置安全清洗。
+
 ### 自定义容器
 
 默认支持 `:::` 容器语法。
@@ -633,7 +675,7 @@ new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOpti
 
 | 选项 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `marked` | `MarkedOptions` | `undefined` | 透传给 `marked` 的配置 |
+| `marked` | `MarkedOptions` | `undefined` | 透传给 `marked` 的配置，包括 `renderer`、`tokenizer`、`hooks` 等扩展点 |
 | `sanitizeHtml` | `HtmlSanitizeOptions \| false` | 开启 | 控制渲染后的 HTML 安全清洗 |
 | `container` | `ContainerOptions \| false` | 开启 | 配置 `:::` 容器，或显式关闭 |
 | `math` | `MathRenderOptions \| false` | 开启 | 配置数学公式，或显式关闭 |

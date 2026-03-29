@@ -182,6 +182,48 @@ Use `append()` followed by `finalize()` when the Markdown arrives chunk by chunk
 
 Use `setMarkdown()` if you want to replace the entire current renderer state with a new full document.
 
+### Custom `marked` Renderers
+
+`StreamMarkdownOptions.marked` is passed through to the internal `marked` instance.
+
+That means you can customize built-in `marked` behavior such as `renderer`, `tokenizer`, or `hooks` without leaving the incremental rendering pipeline.
+
+For example, to override how links are rendered:
+
+```ts
+import { StreamMarkdownRenderer } from 'incremark-renderer';
+
+const renderer = new StreamMarkdownRenderer({
+  marked: {
+    renderer: {
+      link(token) {
+        return `<a data-href="${token.href}">${token.text || token.href}</a>`;
+      },
+    },
+  },
+});
+```
+
+The same shape also works in browser-facing APIs:
+
+```ts
+import { StreamingMarkdownController } from 'incremark-renderer';
+
+const controller = new StreamingMarkdownController(root, {
+  renderer: {
+    marked: {
+      renderer: {
+        link(token) {
+          return `<a data-href="${token.href}">${token.text || token.href}</a>`;
+        },
+      },
+    },
+  },
+});
+```
+
+Note that the built-in HTML sanitizer still runs after rendering unless you disable it or provide a custom sanitizer.
+
 ### Custom Containers
 
 `:::` containers are supported out of the box.
@@ -633,7 +675,7 @@ new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOpti
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `marked` | `MarkedOptions` | `undefined` | Pass-through `marked` configuration |
+| `marked` | `MarkedOptions` | `undefined` | Pass-through `marked` configuration, including `renderer`, `tokenizer`, and `hooks` |
 | `sanitizeHtml` | `HtmlSanitizeOptions \| false` | enabled | Control the post-render HTML sanitizer |
 | `container` | `ContainerOptions \| false` | enabled | Configure `:::` containers or disable them |
 | `math` | `MathRenderOptions \| false` | enabled | Configure math rendering or disable it |
