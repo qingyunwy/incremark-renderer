@@ -1,49 +1,49 @@
 # incremark-renderer
 
-Streaming Markdown renderer for chat UIs, LLM products, and any frontend that needs partial Markdown updates without rerendering the whole document.
+Incremental Markdown renderer for chat interfaces, LLM products, and other frontends that need partial updates without rerendering the entire document.
 
 - GitHub: [qingyunwy/incremark-renderer](https://github.com/qingyunwy/incremark-renderer)
 - npm: [incremark-renderer](https://www.npmjs.com/package/incremark-renderer)
 - Chinese documentation: [README.zh-CN.md](./README.zh-CN.md)
 
-## What It Is
+## Overview
 
-`incremark-renderer` is a `marked.js`-based Markdown renderer designed for streaming output.
+`incremark-renderer` is a `marked.js`-based renderer for progressively arriving Markdown.
 
-Instead of rerunning the full Markdown lexer and replacing the full DOM on every incoming chunk, it:
+Instead of reparsing the full document and replacing the full DOM on every incoming chunk, it:
 
 - detects stable block boundaries conservatively
 - re-lexes only newly stabilized blocks plus the current mutable tail
 - diffs block token trees and emits block-level patches
 - can apply those patches directly to the browser DOM
 
-It also ships with practical frontend features that are common in LLM products:
+It also includes features that are commonly needed in production chat and LLM interfaces:
 
 - fenced code highlighting via `highlight.js`
 - inline and block math via `katex`
-- `:::` custom container parsing
-- default HTML sanitization for untrusted Markdown
-- ChatGPT-style typewriter playback utilities
+- custom `:::` container parsing
+- HTML sanitization enabled by default
+- typewriter playback and cursor utilities
 
-## What Problem It Solves
+## Why It Exists
 
-If you render streaming Markdown by calling a full parser on the entire document every time a chunk arrives, you usually hit the same problems:
+Naive streaming Markdown pipelines usually reparse the full document every time a chunk arrives. That approach tends to create the same problems:
 
 - performance cost grows with document length
 - unfinished paragraphs, lists, and code fences keep being reparsed
 - DOM gets replaced too aggressively, causing visible flicker
-- business integrations like custom containers or special code blocks become harder to control
+- custom integrations such as containers or specialized code blocks become harder to control
 
 `incremark-renderer` is built to solve exactly that class of problem.
 
 ## Why Use It
 
-- `marked.js` compatible: stays close to the familiar Markdown ecosystem
-- streaming-first: optimized for append-based rendering
-- safer block stabilization: unfinished content stays in the mutable tail
+- `marked.js` compatible: stays close to the standard Markdown tooling ecosystem
+- streaming-oriented: optimized for append-based rendering
+- conservative block stabilization: unfinished content stays in the mutable tail
 - partial DOM updates: unchanged blocks remain mounted
-- customizable: code blocks, containers, sanitization, block rendering, plugins
-- batteries included: highlighting, math, typewriter playback, cursor controller
+- extensible: code blocks, containers, sanitization, block rendering, and plugins are configurable
+- browser-ready: optional DOM renderer, typewriter playback, and cursor controller
 - safer defaults: rendered HTML is sanitized by default
 
 ## Install
@@ -52,18 +52,23 @@ If you render streaming Markdown by calling a full parser on the entire document
 npm install incremark-renderer
 ```
 
+## Runtime Notes
+
+- `StreamMarkdownRenderer`, `renderMarkdown()`, `renderMarkdownToString()`, `MarkdownTypewriter`, and `StreamingMarkdownTypewriter` do not require the DOM.
+- `IncrementalDomRenderer`, `StreamingMarkdownController`, and `TypewriterCursorController` are browser-only APIs because they operate on `HTMLElement` instances.
+
 ## Which API Should I Use?
 
-| Scenario | Recommended API |
-| --- | --- |
-| Real-time streaming Markdown, framework-agnostic | `StreamMarkdownRenderer` |
-| Real-time streaming Markdown directly into the browser DOM | `IncrementalDomRenderer` |
-| Browser-side streaming with built-in typewriter playback and cursor | `StreamingMarkdownController` |
-| Full Markdown string already available, only need HTML | `renderMarkdownToString()` |
-| Full Markdown string already available, also need blocks and snapshot | `renderMarkdown()` |
-| Need typewriter-style playback for a known full string | `MarkdownTypewriter` |
-| Need typewriter-style playback for a live upstream stream | `StreamingMarkdownTypewriter` |
-| Need a cursor that follows the rendered text tail | `TypewriterCursorController` |
+| Scenario | Runtime | Recommended API |
+| --- | --- | --- |
+| Streaming Markdown in framework adapters, Node.js, workers, or SSR pipelines | Any JavaScript runtime | `StreamMarkdownRenderer` |
+| Streaming Markdown directly into the browser DOM | Browser | `IncrementalDomRenderer` |
+| Browser-side streaming with built-in typewriter playback and cursor handling | Browser | `StreamingMarkdownController` |
+| Full Markdown string already available, only need HTML | Any JavaScript runtime | `renderMarkdownToString()` |
+| Full Markdown string already available, also need blocks and snapshot metadata | Any JavaScript runtime | `renderMarkdown()` |
+| Typewriter playback for a known full string | Any JavaScript runtime | `MarkdownTypewriter` |
+| Typewriter playback for a live upstream stream | Any JavaScript runtime | `StreamingMarkdownTypewriter` |
+| Cursor following only | Browser | `TypewriterCursorController` |
 
 ## Quick Start
 
@@ -88,6 +93,10 @@ console.log(renderer.getSnapshot());
 import { IncrementalDomRenderer } from 'incremark-renderer';
 
 const root = document.getElementById('app');
+if (!(root instanceof HTMLElement)) {
+  throw new Error('Missing #app root element.');
+}
+
 const renderer = new IncrementalDomRenderer(root);
 
 renderer.append('## Title\n\nPart');
@@ -101,10 +110,11 @@ renderer.finalize();
 import { StreamingMarkdownController } from 'incremark-renderer';
 
 const root = document.getElementById('app');
+if (!(root instanceof HTMLElement)) {
+  throw new Error('Missing #app root element.');
+}
+
 const controller = new StreamingMarkdownController(root, {
-  cursor: {
-    variant: 'circle',
-  },
   typewriter: {
     baseDelayMs: 26,
     minChunkSize: 1,
@@ -143,12 +153,12 @@ console.log(result.snapshot);
 
 ## Core Concepts
 
-### Stable Blocks and Tail
+### Stable Blocks and Mutable Tail
 
 The renderer splits content into:
 
 - stable blocks: blocks that are considered complete and will not be re-lexed again
-- tail: the last mutable fragment that may still grow with future chunks
+- mutable tail: the last fragment that may still grow with future chunks
 
 This is the foundation for incremental lexing and patch generation.
 
@@ -352,16 +362,17 @@ Important: custom HTML returned by `container.render`, `highlight.renderHeader`,
 
 ### Typewriter Playback
 
-If you want the browser DOM renderer, streaming typewriter, and cursor already wired together, use `StreamingMarkdownController`:
+For browser-side integrations, `StreamingMarkdownController` is the recommended high-level API because it wires together incremental DOM rendering, streaming typewriter playback, and cursor handling:
 
 ```ts
 import { StreamingMarkdownController } from 'incremark-renderer';
 
 const root = document.getElementById('app');
+if (!(root instanceof HTMLElement)) {
+  throw new Error('Missing #app root element.');
+}
+
 const controller = new StreamingMarkdownController(root, {
-  cursor: {
-    variant: 'circle',
-  },
   renderer: {
     highlight: {
       renderHeader: ({ code, defaultHeaderContent }) =>
@@ -384,7 +395,7 @@ upstream.on('end', () => {
 });
 ```
 
-If you need lower-level control, the original building blocks are still available:
+Use the lower-level classes below when you need custom orchestration.
 
 Use `MarkdownTypewriter` when the full Markdown string is already known:
 
@@ -396,6 +407,10 @@ import {
 } from 'incremark-renderer';
 
 const root = document.getElementById('app');
+if (!(root instanceof HTMLElement)) {
+  throw new Error('Missing #app root element.');
+}
+
 const renderer = new IncrementalDomRenderer(root);
 const cursor = new TypewriterCursorController(root);
 
@@ -431,6 +446,10 @@ import {
 } from 'incremark-renderer';
 
 const root = document.getElementById('app');
+if (!(root instanceof HTMLElement)) {
+  throw new Error('Missing #app root element.');
+}
+
 const renderer = new IncrementalDomRenderer(root);
 const typewriter = new StreamingMarkdownTypewriter({
   onChunk: (chunk) => {
@@ -456,26 +475,26 @@ upstream.on('end', () => {
 
 ### Main Exports
 
-| Export | Type | Purpose |
-| --- | --- | --- |
-| `renderMarkdownToString` | function | Full render to HTML string |
-| `renderMarkdown` | function | Full render to `{ html, blocks, snapshot }` |
-| `StreamMarkdownRenderer` | class | Framework-agnostic incremental renderer |
-| `IncrementalDomRenderer` | class | Browser DOM renderer with partial updates |
-| `StreamingMarkdownController` | class | Browser-side controller that bundles DOM rendering, typewriter playback, and cursor handling |
-| `MarkdownTypewriter` | class | Typewriter playback for a known full string |
-| `StreamingMarkdownTypewriter` | class | Typewriter playback for a live stream |
-| `TypewriterCursorController` | class | Cursor-follow utility for browser UIs |
-| `extractStableBlocks` | function | Low-level stable block detector |
-| `diffAst` | function | Low-level token diff utility |
-| `digestTokens` | function | Low-level token digest utility |
-| `createContainerExtension` | function | Advanced `marked` extension export |
-| `createHighlightExtension` | function | Advanced `marked` extension export |
-| `createMathExtension` | function | Advanced `marked` extension export |
-| `createDefaultHtmlSanitizer` | function | Built-in sanitizer factory |
-| `createHtmlSanitizer` | function | Sanitizer factory with custom override |
-| `DefaultBlockRenderer` | class | Default block-to-HTML renderer |
-| `wrapBlockHtml` | function | Wrap rendered block HTML with block metadata |
+| Export | Type | Runtime | Purpose |
+| --- | --- | --- | --- |
+| `renderMarkdownToString` | function | Any JavaScript runtime | Full render to an HTML string |
+| `renderMarkdown` | function | Any JavaScript runtime | Full render to `{ html, blocks, snapshot }` |
+| `StreamMarkdownRenderer` | class | Any JavaScript runtime | Incremental renderer without DOM dependencies |
+| `IncrementalDomRenderer` | class | Browser | DOM renderer with partial updates |
+| `StreamingMarkdownController` | class | Browser | High-level controller that bundles DOM rendering, typewriter playback, and cursor handling |
+| `MarkdownTypewriter` | class | Any JavaScript runtime | Typewriter playback for a known full string |
+| `StreamingMarkdownTypewriter` | class | Any JavaScript runtime | Typewriter playback for a live stream |
+| `TypewriterCursorController` | class | Browser | Cursor-follow utility for browser UIs |
+| `extractStableBlocks` | function | Any JavaScript runtime | Low-level stable block detector |
+| `diffAst` | function | Any JavaScript runtime | Low-level token diff utility |
+| `digestTokens` | function | Any JavaScript runtime | Low-level token digest utility |
+| `createContainerExtension` | function | Any JavaScript runtime | Advanced `marked` extension export |
+| `createHighlightExtension` | function | Any JavaScript runtime | Advanced `marked` extension export |
+| `createMathExtension` | function | Any JavaScript runtime | Advanced `marked` extension export |
+| `createDefaultHtmlSanitizer` | function | Any JavaScript runtime | Built-in sanitizer factory |
+| `createHtmlSanitizer` | function | Any JavaScript runtime | Sanitizer factory with custom override |
+| `DefaultBlockRenderer` | class | Any JavaScript runtime | Default block-to-HTML renderer |
+| `wrapBlockHtml` | function | Any JavaScript runtime | Wrap rendered block HTML with block metadata |
 
 ### `StreamMarkdownRenderer`
 
@@ -499,6 +518,8 @@ new StreamMarkdownRenderer(options?: StreamMarkdownOptions)
 
 ### `IncrementalDomRenderer`
 
+Browser-only API.
+
 #### Constructor
 
 ```ts
@@ -517,6 +538,8 @@ new IncrementalDomRenderer(root: HTMLElement, options?: StreamMarkdownOptions)
 | `renderToString()` | Return current rendered HTML as a string |
 
 ### `StreamingMarkdownController`
+
+Browser-only API.
 
 #### Constructor
 
@@ -544,7 +567,7 @@ new StreamingMarkdownController(
 | `renderToString()` | Return current rendered HTML as a string |
 | `destroy()` | Stop playback and remove cursor listeners |
 
-Escape hatches: `controller.renderer`, `controller.typewriter`, and `controller.cursorController` expose the underlying low-level instances when you need custom wiring.
+Low-level access: `controller.renderer`, `controller.typewriter`, and `controller.cursorController` expose the underlying instances when you need custom wiring.
 
 ### `MarkdownTypewriter`
 
@@ -586,6 +609,8 @@ new StreamingMarkdownTypewriter(options: TypewriterOptions)
 | `isRunning()` | Return whether playback is currently active |
 
 ### `TypewriterCursorController`
+
+Browser-only API.
 
 #### Constructor
 
@@ -749,17 +774,19 @@ new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOpti
 
 ### `StreamingMarkdownControllerChunkMeta`
 
+Extends `TypewriterChunkMeta` with:
+
 | Field | Type | Description |
 | --- | --- | --- |
 | `patches` | `RenderPatch[]` | DOM patches produced by the chunk render |
-| `...TypewriterChunkMeta` | `TypewriterChunkMeta` | Includes all standard typewriter chunk fields |
 
 ### `StreamingMarkdownControllerCompleteMeta`
+
+Extends `TypewriterEventMeta` with:
 
 | Field | Type | Description |
 | --- | --- | --- |
 | `patches` | `RenderPatch[]` | Final DOM patches produced by `renderer.finalize()` |
-| `...TypewriterEventMeta` | `TypewriterEventMeta` | Includes the completion event fields |
 
 ### `TypewriterCursorOptions`
 
@@ -818,7 +845,7 @@ The demo shows:
 - block snapshots and stable block counts
 - typewriter playback and cursor following
 - code highlighting, custom containers, and math rendering
-- browser DOM updates driven by `IncrementalDomRenderer`
+- browser DOM updates driven by `StreamingMarkdownController`
 
 ## Security Notes
 

@@ -1,7 +1,7 @@
 import xss from 'xss';
 import type { IWhiteList, OnTagAttrHandler, SafeAttrValueHandler } from 'xss';
 
-import type { HtmlSanitizeOptions, HtmlSanitizer } from './types.js';
+import type { HtmlSanitizeOptions, HtmlSanitizer } from '../shared/types.js';
 
 const xssRuntime = xss as unknown as typeof import('xss');
 

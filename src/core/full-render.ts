@@ -1,5 +1,5 @@
 import { StreamMarkdownRenderer } from './stream-markdown.js';
-import type { FullRenderResult, StreamMarkdownOptions } from './types.js';
+import type { FullRenderResult, StreamMarkdownOptions } from '../shared/types.js';
 
 export function renderMarkdown(
   markdown: string,

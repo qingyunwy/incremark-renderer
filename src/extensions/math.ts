@@ -1,7 +1,7 @@
 import katex from 'katex';
 import type { MarkedExtension } from 'marked';
 
-import type { MathRenderOptions } from './types.js';
+import type { MathRenderOptions } from '../shared/types.js';
 
 const BLOCK_DOLLAR = '$$';
 const BLOCK_BRACKET_OPEN = '\\[';

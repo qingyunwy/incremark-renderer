@@ -1,16 +1,16 @@
-export { extractStableBlocks } from './block-boundary.js';
-export { diffAst, digestTokens } from './ast-diff.js';
-export { createContainerExtension } from './container.js';
-export { createDefaultHtmlSanitizer, createHtmlSanitizer } from './html-sanitizer.js';
-export { IncrementalDomRenderer } from './dom-renderer.js';
-export { renderMarkdown, renderMarkdownToString } from './full-render.js';
-export { createHighlightExtension } from './highlight.js';
-export { createMathExtension } from './math.js';
-export { DefaultBlockRenderer, wrapBlockHtml } from './renderers.js';
-export { StreamMarkdownRenderer } from './stream-markdown.js';
-export { StreamingMarkdownController } from './streaming-controller.js';
-export { TypewriterCursorController } from './typewriter-cursor.js';
-export { MarkdownTypewriter, StreamingMarkdownTypewriter } from './typewriter.js';
+export { extractStableBlocks } from './core/block-boundary.js';
+export { diffAst, digestTokens } from './core/ast-diff.js';
+export { createContainerExtension } from './extensions/container.js';
+export { createDefaultHtmlSanitizer, createHtmlSanitizer } from './extensions/html-sanitizer.js';
+export { IncrementalDomRenderer } from './browser/dom-renderer.js';
+export { renderMarkdown, renderMarkdownToString } from './core/full-render.js';
+export { createHighlightExtension } from './extensions/highlight.js';
+export { createMathExtension } from './extensions/math.js';
+export { DefaultBlockRenderer, wrapBlockHtml } from './core/renderers.js';
+export { StreamMarkdownRenderer } from './core/stream-markdown.js';
+export { StreamingMarkdownController } from './browser/streaming-controller.js';
+export { TypewriterCursorController } from './browser/typewriter-cursor.js';
+export { MarkdownTypewriter, StreamingMarkdownTypewriter } from './playback/typewriter.js';
 export type {
   AstNodePatch,
   BlockExtractionResult,
@@ -45,4 +45,4 @@ export type {
   TypewriterOptions,
   TypewriterState,
   TokensList,
-} from './types.js';
+} from './shared/types.js';

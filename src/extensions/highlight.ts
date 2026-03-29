@@ -8,7 +8,7 @@ import type {
   CodeBlockHeaderRenderContext,
   CodeHighlightOptions,
   CodeBlockToken,
-} from './types.js';
+} from '../shared/types.js';
 
 const TRAILING_NEWLINE_RE = /\n$/u;
 const INFO_LANGUAGE_RE = /^\S+/u;

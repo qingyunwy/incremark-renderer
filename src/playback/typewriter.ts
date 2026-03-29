@@ -3,7 +3,7 @@ import type {
   TypewriterEventMeta,
   TypewriterOptions,
   TypewriterState,
-} from './types.js';
+} from '../shared/types.js';
 
 const FENCE_PATTERN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 const SENTENCE_END_PATTERN = /[.!?。！？]$/;

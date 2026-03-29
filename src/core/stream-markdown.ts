@@ -2,10 +2,10 @@ import { Marked } from 'marked';
 
 import { diffAst, digestTokens } from './ast-diff.js';
 import { extractStableBlocks } from './block-boundary.js';
-import { createContainerExtension } from './container.js';
-import { createHighlightExtension } from './highlight.js';
-import { createHtmlSanitizer } from './html-sanitizer.js';
-import { createMathExtension } from './math.js';
+import { createContainerExtension } from '../extensions/container.js';
+import { createHighlightExtension } from '../extensions/highlight.js';
+import { createHtmlSanitizer } from '../extensions/html-sanitizer.js';
+import { createMathExtension } from '../extensions/math.js';
 import { DefaultBlockRenderer } from './renderers.js';
 import type {
   RenderPatch,
@@ -13,7 +13,7 @@ import type {
   StreamMarkdownOptions,
   StreamRendererSnapshot,
   TokensList,
-} from './types.js';
+} from '../shared/types.js';
 
 function makeSnapshot(blocks: StableBlock[], sourceLength: number): StreamRendererSnapshot {
   return {

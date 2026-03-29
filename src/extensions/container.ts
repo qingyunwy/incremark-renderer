@@ -11,7 +11,7 @@ import type {
   ContainerOptions,
   ContainerRenderContext,
   ContainerToken,
-} from './types.js';
+} from '../shared/types.js';
 
 const CONTAINER_START_RE = /(^|\n) {0,3}:{3,}(?:(?=[^\s:\n])|[ \t]+(?=\S))/u;
 const HTML_ESCAPE_RE = /[&<>"']/g;

@@ -1,4 +1,4 @@
-import type { TypewriterCursorOptions, TypewriterCursorVariant } from './types.js';
+import type { TypewriterCursorOptions, TypewriterCursorVariant } from '../shared/types.js';
 
 interface CaretMetrics {
   rect: DOMRect;

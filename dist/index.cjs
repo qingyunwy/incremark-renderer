@@ -51,7 +51,7 @@ __export(index_exports, {
 });
 module.exports = __toCommonJS(index_exports);
 
-// src/container-syntax.ts
+// src/extensions/container-syntax.ts
 var FENCE_PATTERN = /^ {0,3}(`{3,}|~{3,})(.*)$/u;
 var CONTAINER_PATTERN = /^ {0,3}(:{3,})([^\n]*)$/u;
 function stripLineEnding(line) {
@@ -97,7 +97,7 @@ function isContainerClose(line, size) {
   return pattern.test(stripLineEnding(line));
 }
 
-// src/block-boundary.ts
+// src/core/block-boundary.ts
 var SINGLE_LINE_BLOCK_PATTERN = /^(#{1,6}\s+.+| {0,3}([-*_])(?:\s*\2){2,}\s*)$/;
 var SETEXT_UNDERLINE_PATTERN = /^ {0,3}(=+|-+)\s*$/;
 function getCompletedLines(input) {
@@ -228,7 +228,7 @@ function extractStableBlocks(input, finalize = false) {
   };
 }
 
-// src/ast-diff.ts
+// src/core/ast-diff.ts
 function getChildren(token) {
   const nested = [];
   if (Array.isArray(token.tokens)) {
@@ -311,7 +311,7 @@ function diffAst(previous, next) {
   return patches;
 }
 
-// src/container.ts
+// src/extensions/container.ts
 var CONTAINER_START_RE = /(^|\n) {0,3}:{3,}(?:(?=[^\s:\n])|[ \t]+(?=\S))/u;
 var HTML_ESCAPE_RE = /[&<>"']/g;
 var HTML_ESCAPES = {
@@ -452,7 +452,7 @@ function createContainerExtension(options = {}) {
   };
 }
 
-// src/html-sanitizer.ts
+// src/extensions/html-sanitizer.ts
 var import_xss = __toESM(require("xss"), 1);
 var xssRuntime = import_xss.default;
 var {
@@ -559,7 +559,7 @@ function createHtmlSanitizer(options = {}) {
   return options.sanitizer ?? createDefaultHtmlSanitizer();
 }
 
-// src/renderers.ts
+// src/core/renderers.ts
 var DefaultBlockRenderer = class {
   marked;
   constructor(marked) {
@@ -573,10 +573,10 @@ function wrapBlockHtml(block, innerHtml) {
   return `<div data-incremark-block="${block.key}" data-stable="${block.stable}">${innerHtml}</div>`;
 }
 
-// src/stream-markdown.ts
+// src/core/stream-markdown.ts
 var import_marked = require("marked");
 
-// src/highlight.ts
+// src/extensions/highlight.ts
 var import_highlight = __toESM(require("highlight.js"), 1);
 var TRAILING_NEWLINE_RE = /\n$/u;
 var INFO_LANGUAGE_RE = /^\S+/u;
@@ -785,7 +785,7 @@ function createHighlightExtension(options = {}, runtime = {}) {
   };
 }
 
-// src/math.ts
+// src/extensions/math.ts
 var import_katex = __toESM(require("katex"), 1);
 var BLOCK_DOLLAR = "$$";
 var BLOCK_BRACKET_OPEN = "\\[";
@@ -923,7 +923,7 @@ function createMathExtension(options) {
   };
 }
 
-// src/stream-markdown.ts
+// src/core/stream-markdown.ts
 function makeSnapshot(blocks, sourceLength) {
   return {
     blocks,
@@ -1103,7 +1103,7 @@ var StreamMarkdownRenderer = class {
   }
 };
 
-// src/dom-renderer.ts
+// src/browser/dom-renderer.ts
 function syncAttributes(current, next) {
   for (const attribute of Array.from(current.attributes)) {
     if (!next.hasAttribute(attribute.name)) {
@@ -1237,7 +1237,7 @@ var IncrementalDomRenderer = class {
   }
 };
 
-// src/full-render.ts
+// src/core/full-render.ts
 function renderMarkdown(markdown, options = {}) {
   const renderer = new StreamMarkdownRenderer(options);
   renderer.setMarkdown(markdown);
@@ -1251,7 +1251,7 @@ function renderMarkdownToString(markdown, options = {}) {
   return renderMarkdown(markdown, options).html;
 }
 
-// src/typewriter-cursor.ts
+// src/browser/typewriter-cursor.ts
 function getLastBlock(root) {
   const blocks = root.querySelectorAll("[data-incremark-block]");
   return blocks.length > 0 ? blocks.item(blocks.length - 1) : null;
@@ -1441,7 +1441,7 @@ var TypewriterCursorController = class {
   }
 };
 
-// src/typewriter.ts
+// src/playback/typewriter.ts
 var FENCE_PATTERN2 = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 var SENTENCE_END_PATTERN = /[.!?。！？]$/;
 var CLAUSE_END_PATTERN = /[,;:，；：、]$/;
@@ -1752,7 +1752,7 @@ var StreamingMarkdownTypewriter = class extends BaseMarkdownTypewriter {
   }
 };
 
-// src/streaming-controller.ts
+// src/browser/streaming-controller.ts
 function normalizeCursorOptions(options) {
   if (options.cursor === false) {
     return null;

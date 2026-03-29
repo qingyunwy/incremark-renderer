@@ -1,12 +1,12 @@
-import type { BlockExtractionResult } from './types.js';
-import type { FenceState } from './container-syntax.js';
+import type { BlockExtractionResult } from '../shared/types.js';
+import type { FenceState } from '../extensions/container-syntax.js';
 import {
   getContainerOpen,
   getFenceStart,
   isContainerClose,
   isFenceEnd,
   stripLineEnding,
-} from './container-syntax.js';
+} from '../extensions/container-syntax.js';
 
 const SINGLE_LINE_BLOCK_PATTERN =
   /^(#{1,6}\s+.+| {0,3}([-*_])(?:\s*\2){2,}\s*)$/;

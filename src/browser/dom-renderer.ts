@@ -1,6 +1,6 @@
-import { wrapBlockHtml } from './renderers.js';
-import type { RenderPatch, StableBlock, StreamMarkdownOptions } from './types.js';
-import { StreamMarkdownRenderer } from './stream-markdown.js';
+import { wrapBlockHtml } from '../core/renderers.js';
+import type { RenderPatch, StableBlock, StreamMarkdownOptions } from '../shared/types.js';
+import { StreamMarkdownRenderer } from '../core/stream-markdown.js';
 
 interface AttributeSyncPair {
   current: Element;

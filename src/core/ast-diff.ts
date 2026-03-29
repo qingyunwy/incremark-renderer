@@ -1,4 +1,4 @@
-import type { AstNodePatch, TokensList } from './types.js';
+import type { AstNodePatch, TokensList } from '../shared/types.js';
 
 // `marked` nests child tokens in different properties depending on the block kind.
 // Normalizing that shape lets the diff walker stay generic.

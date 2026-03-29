@@ -1,6 +1,6 @@
 import { IncrementalDomRenderer } from './dom-renderer.js';
 import { TypewriterCursorController } from './typewriter-cursor.js';
-import { StreamingMarkdownTypewriter } from './typewriter.js';
+import { StreamingMarkdownTypewriter } from '../playback/typewriter.js';
 import type {
   StableBlock,
   StreamingMarkdownControllerChunkMeta,
@@ -9,7 +9,7 @@ import type {
   StreamingMarkdownControllerTypewriterOptions,
   TypewriterCursorOptions,
   TypewriterEventMeta,
-} from './types.js';
+} from '../shared/types.js';
 
 function normalizeCursorOptions(
   options: StreamingMarkdownControllerOptions,

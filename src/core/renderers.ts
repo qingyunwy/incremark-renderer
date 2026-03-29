@@ -1,6 +1,6 @@
 import type { Marked } from 'marked';
 
-import type { BlockRenderer, StableBlock } from './types.js';
+import type { BlockRenderer, StableBlock } from '../shared/types.js';
 
 export class DefaultBlockRenderer implements BlockRenderer {
   private readonly marked: Marked;

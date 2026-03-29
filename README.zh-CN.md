@@ -1,14 +1,14 @@
 # incremark-renderer
 
-面向聊天 UI、LLM 产品和流式内容场景的 Markdown 增量渲染器。它基于 `marked.js`，重点解决“Markdown 一边到达、一边渲染”时的性能、稳定性和可扩展性问题。
+面向聊天界面、LLM 产品和流式内容场景的 Markdown 增量渲染器。它基于 `marked.js`，重点解决“Markdown 一边到达、一边渲染”时的性能、稳定性和可扩展性问题。
 
 - GitHub: [qingyunwy/incremark-renderer](https://github.com/qingyunwy/incremark-renderer)
 - npm: [incremark-renderer](https://www.npmjs.com/package/incremark-renderer)
 - English documentation: [README.md](./README.md)
 
-## 它是什么
+## 概览
 
-`incremark-renderer` 是一个基于 `marked.js` 的流式 Markdown 渲染库。
+`incremark-renderer` 是一个基于 `marked.js`、面向渐进式 Markdown 输入的渲染库。
 
 和“每来一个 chunk 就重新解析整篇 Markdown、再把整个 DOM 重刷一遍”的方案不同，它会：
 
@@ -17,34 +17,34 @@
 - 对块级 token 树做比较并产出 patch
 - 在浏览器里按块做局部 DOM 更新
 
-同时它还内置了 LLM 场景里常见的能力：
+同时它也提供了生产环境中常见的扩展能力：
 
 - `highlight.js` 代码高亮
 - `katex` 数学公式渲染
 - `:::` 自定义容器
-- 默认启用的 HTML 安全清洗
-- ChatGPT 风格打字机播放
+- 默认开启的 HTML 安全清洗
+- 打字机播放和光标跟随工具
 
-## 它解决什么问题
+## 要解决的问题
 
-如果你的 Markdown 是流式到达的，传统做法通常会遇到这些问题：
+朴素的流式 Markdown 方案通常会在每个 chunk 到达时重新解析整篇文档。这类实现往往会遇到相同的问题：
 
 - 文档越长，每次全量解析越贵
 - 段落、列表、代码块尚未闭合时会反复抖动
 - DOM 整体替换太频繁，容易闪烁
-- 业务自定义扩展点不够清晰，比如特殊容器、特殊代码块
+- 业务侧扩展点不够清晰，比如自定义容器、特殊代码块
 
 `incremark-renderer` 就是针对这一类问题设计的。
 
 ## 它的优势
 
-- 兼容 `marked.js`：不脱离主流 Markdown 生态
-- 面向流式：核心流程就是围绕 `append()` 设计
-- 稳定块边界检测：未闭合内容会留在可变 tail 中
-- 块级局部更新：不动的块不会重复挂载
-- 可扩展：容器、代码块、sanitizer、block renderer、plugin 都可定制
-- 自带常用能力：高亮、公式、打字机、光标控制器
-- 默认更安全：渲染 HTML 会先经过 sanitizer
+- 兼容 `marked.js`：保持在主流 Markdown 工具链之内
+- 面向流式输入：核心流程围绕 `append()` 设计
+- 保守的稳定块判定：未闭合内容会保留在可变尾部
+- 块级局部更新：未变化的块不会重复挂载
+- 可扩展：容器、代码块、安全清洗、block 渲染和插件机制都可定制
+- 浏览器场景友好：可选 DOM 渲染、打字机播放和光标控制器
+- 默认更安全：输出 HTML 默认会经过安全清洗
 
 ## 安装
 
@@ -52,18 +52,23 @@
 npm install incremark-renderer
 ```
 
+## 运行环境说明
+
+- `StreamMarkdownRenderer`、`renderMarkdown()`、`renderMarkdownToString()`、`MarkdownTypewriter`、`StreamingMarkdownTypewriter` 不依赖 DOM。
+- `IncrementalDomRenderer`、`StreamingMarkdownController`、`TypewriterCursorController` 是浏览器专用 API，因为它们直接操作 `HTMLElement`。
+
 ## 我该用哪个 API？
 
-| 场景 | 推荐 API |
-| --- | --- |
-| 真实流式 Markdown，且不依赖 DOM | `StreamMarkdownRenderer` |
-| 真实流式 Markdown，直接渲染到浏览器 DOM | `IncrementalDomRenderer` |
-| 浏览器侧一站式流式渲染，内置打字机和光标 | `StreamingMarkdownController` |
-| 已经拿到完整 Markdown，只想要 HTML | `renderMarkdownToString()` |
-| 已经拿到完整 Markdown，还想拿 blocks 和 snapshot | `renderMarkdown()` |
-| 已经有完整字符串，只是想做打字机回放 | `MarkdownTypewriter` |
-| 上游内容是实时流式到达 | `StreamingMarkdownTypewriter` |
-| 需要一个跟随输出末尾的打字光标 | `TypewriterCursorController` |
+| 场景 | 运行环境 | 推荐 API |
+| --- | --- | --- |
+| 在框架适配层、Node.js、Worker 或 SSR 流程中处理流式 Markdown | 通用 JavaScript 运行时 | `StreamMarkdownRenderer` |
+| 直接把流式 Markdown 渲染到浏览器 DOM | 浏览器 | `IncrementalDomRenderer` |
+| 浏览器侧一站式流式渲染，内置打字机播放和光标跟随 | 浏览器 | `StreamingMarkdownController` |
+| 已经拿到完整 Markdown，只需要 HTML | 通用 JavaScript 运行时 | `renderMarkdownToString()` |
+| 已经拿到完整 Markdown，同时需要 blocks 和 snapshot 元数据 | 通用 JavaScript 运行时 | `renderMarkdown()` |
+| 已经有完整字符串，只需要打字机回放 | 通用 JavaScript 运行时 | `MarkdownTypewriter` |
+| 上游内容实时流式到达，需要打字机播放 | 通用 JavaScript 运行时 | `StreamingMarkdownTypewriter` |
+| 只需要跟随文本尾部的光标 | 浏览器 | `TypewriterCursorController` |
 
 ## 快速开始
 
@@ -88,6 +93,10 @@ console.log(renderer.getSnapshot());
 import { IncrementalDomRenderer } from 'incremark-renderer';
 
 const root = document.getElementById('app');
+if (!(root instanceof HTMLElement)) {
+  throw new Error('缺少 #app 根节点。');
+}
+
 const renderer = new IncrementalDomRenderer(root);
 
 renderer.append('## 标题\n\nPart');
@@ -101,10 +110,11 @@ renderer.finalize();
 import { StreamingMarkdownController } from 'incremark-renderer';
 
 const root = document.getElementById('app');
+if (!(root instanceof HTMLElement)) {
+  throw new Error('缺少 #app 根节点。');
+}
+
 const controller = new StreamingMarkdownController(root, {
-  cursor: {
-    variant: 'circle',
-  },
   typewriter: {
     baseDelayMs: 26,
     minChunkSize: 1,
@@ -143,16 +153,16 @@ console.log(result.snapshot);
 
 ## 核心概念
 
-### Stable Blocks 和 Tail
+### 稳定块与可变尾部
 
 渲染器会把当前输入拆成两部分：
 
-- stable blocks：已经稳定、不需要再重复 `lexer` 的块
-- tail：最后一个仍可能继续增长的可变片段
+- 稳定块（stable blocks）：已经稳定、不需要再重复 `lexer` 的块
+- 可变尾部（mutable tail）：最后一个仍可能继续增长的片段
 
 这也是整个增量渲染性能模型的基础。
 
-### Render Patch
+### 渲染补丁（render patches）
 
 每次更新会输出块级 patch：
 
@@ -279,7 +289,7 @@ const renderer = new StreamMarkdownRenderer({
 });
 ```
 
-这里的 `closed` 表示当前 fenced code block 是否已经出现闭合 fence。
+这里的 `closed` 表示当前围栏代码块（fenced code block）是否已经出现闭合 fence。
 
 如果你希望完全关闭代码高亮，保留普通代码块输出：
 
@@ -352,16 +362,17 @@ const renderer = new StreamMarkdownRenderer({
 
 ### 打字机播放
 
-如果你想直接拿到“浏览器 DOM 渲染 + 流式打字机 + 光标跟随”这一整套默认组合，可以直接使用 `StreamingMarkdownController`：
+如果你是在浏览器侧接入，`StreamingMarkdownController` 是推荐的高层 API，因为它已经把增量 DOM 渲染、流式打字机播放和光标跟随组合好了：
 
 ```ts
 import { StreamingMarkdownController } from 'incremark-renderer';
 
 const root = document.getElementById('app');
+if (!(root instanceof HTMLElement)) {
+  throw new Error('缺少 #app 根节点。');
+}
+
 const controller = new StreamingMarkdownController(root, {
-  cursor: {
-    variant: 'circle',
-  },
   renderer: {
     highlight: {
       renderHeader: ({ code, defaultHeaderContent }) =>
@@ -384,7 +395,7 @@ upstream.on('end', () => {
 });
 ```
 
-如果你需要更底层的控制，原来的几个基础类仍然可以继续手动组合：
+如果你需要更底层的编排控制，可以继续手动组合下面这些基础类。
 
 如果你已经拿到完整 Markdown，可以使用 `MarkdownTypewriter`：
 
@@ -396,6 +407,10 @@ import {
 } from 'incremark-renderer';
 
 const root = document.getElementById('app');
+if (!(root instanceof HTMLElement)) {
+  throw new Error('缺少 #app 根节点。');
+}
+
 const renderer = new IncrementalDomRenderer(root);
 const cursor = new TypewriterCursorController(root);
 
@@ -431,6 +446,10 @@ import {
 } from 'incremark-renderer';
 
 const root = document.getElementById('app');
+if (!(root instanceof HTMLElement)) {
+  throw new Error('缺少 #app 根节点。');
+}
+
 const renderer = new IncrementalDomRenderer(root);
 const typewriter = new StreamingMarkdownTypewriter({
   onChunk: (chunk) => {
@@ -456,26 +475,26 @@ upstream.on('end', () => {
 
 ### 主要导出
 
-| 导出项 | 类型 | 作用 |
-| --- | --- | --- |
-| `renderMarkdownToString` | function | 全量渲染并返回 HTML |
-| `renderMarkdown` | function | 全量渲染并返回 `{ html, blocks, snapshot }` |
-| `StreamMarkdownRenderer` | class | 与框架无关的增量渲染器 |
-| `IncrementalDomRenderer` | class | 浏览器 DOM 增量渲染器 |
-| `StreamingMarkdownController` | class | 浏览器侧高层控制器，内置 DOM 渲染、打字机播放和光标处理 |
-| `MarkdownTypewriter` | class | 已知完整字符串的打字机回放 |
-| `StreamingMarkdownTypewriter` | class | 实时流式输入的打字机 |
-| `TypewriterCursorController` | class | 浏览器打字光标控制器 |
-| `extractStableBlocks` | function | 底层稳定块检测工具 |
-| `diffAst` | function | 底层 token diff 工具 |
-| `digestTokens` | function | 底层 token 摘要工具 |
-| `createContainerExtension` | function | 高级 `marked` 扩展导出 |
-| `createHighlightExtension` | function | 高级 `marked` 扩展导出 |
-| `createMathExtension` | function | 高级 `marked` 扩展导出 |
-| `createDefaultHtmlSanitizer` | function | 内置 sanitizer 工厂 |
-| `createHtmlSanitizer` | function | 带自定义入口的 sanitizer 工厂 |
-| `DefaultBlockRenderer` | class | 默认 block -> HTML 渲染器 |
-| `wrapBlockHtml` | function | 给 block HTML 包装元数据外层 |
+| 导出项 | 类型 | 运行环境 | 作用 |
+| --- | --- | --- | --- |
+| `renderMarkdownToString` | function | 通用 JavaScript 运行时 | 全量渲染并返回 HTML 字符串 |
+| `renderMarkdown` | function | 通用 JavaScript 运行时 | 全量渲染并返回 `{ html, blocks, snapshot }` |
+| `StreamMarkdownRenderer` | class | 通用 JavaScript 运行时 | 不依赖 DOM 的增量渲染器 |
+| `IncrementalDomRenderer` | class | 浏览器 | 浏览器 DOM 增量渲染器 |
+| `StreamingMarkdownController` | class | 浏览器 | 浏览器侧高层控制器，内置 DOM 渲染、打字机播放和光标处理 |
+| `MarkdownTypewriter` | class | 通用 JavaScript 运行时 | 已知完整字符串的打字机回放 |
+| `StreamingMarkdownTypewriter` | class | 通用 JavaScript 运行时 | 实时流式输入的打字机 |
+| `TypewriterCursorController` | class | 浏览器 | 浏览器打字光标控制器 |
+| `extractStableBlocks` | function | 通用 JavaScript 运行时 | 底层稳定块检测工具 |
+| `diffAst` | function | 通用 JavaScript 运行时 | 底层 token diff 工具 |
+| `digestTokens` | function | 通用 JavaScript 运行时 | 底层 token 摘要工具 |
+| `createContainerExtension` | function | 通用 JavaScript 运行时 | 高级 `marked` 扩展导出 |
+| `createHighlightExtension` | function | 通用 JavaScript 运行时 | 高级 `marked` 扩展导出 |
+| `createMathExtension` | function | 通用 JavaScript 运行时 | 高级 `marked` 扩展导出 |
+| `createDefaultHtmlSanitizer` | function | 通用 JavaScript 运行时 | 内置 sanitizer 工厂 |
+| `createHtmlSanitizer` | function | 通用 JavaScript 运行时 | 带自定义入口的 sanitizer 工厂 |
+| `DefaultBlockRenderer` | class | 通用 JavaScript 运行时 | 默认 block -> HTML 渲染器 |
+| `wrapBlockHtml` | function | 通用 JavaScript 运行时 | 给 block HTML 包装元数据外层 |
 
 ### `StreamMarkdownRenderer`
 
@@ -499,6 +518,8 @@ new StreamMarkdownRenderer(options?: StreamMarkdownOptions)
 
 ### `IncrementalDomRenderer`
 
+浏览器专用 API。
+
 #### 构造函数
 
 ```ts
@@ -517,6 +538,8 @@ new IncrementalDomRenderer(root: HTMLElement, options?: StreamMarkdownOptions)
 | `renderToString()` | 返回当前 HTML 字符串 |
 
 ### `StreamingMarkdownController`
+
+浏览器专用 API。
 
 #### 构造函数
 
@@ -544,7 +567,7 @@ new StreamingMarkdownController(
 | `renderToString()` | 返回当前 HTML 字符串 |
 | `destroy()` | 停止播放并移除光标监听 |
 
-兜底入口：`controller.renderer`、`controller.typewriter`、`controller.cursorController` 会暴露底层实例，方便你在需要时继续做定制。
+底层实例入口：`controller.renderer`、`controller.typewriter`、`controller.cursorController` 会暴露内部实例，方便你在需要时继续做定制。
 
 ### `MarkdownTypewriter`
 
@@ -587,6 +610,8 @@ new StreamingMarkdownTypewriter(options: TypewriterOptions)
 
 ### `TypewriterCursorController`
 
+浏览器专用 API。
+
 #### 构造函数
 
 ```ts
@@ -602,7 +627,7 @@ new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOpti
 | `update()` | 重新计算光标位置 |
 | `destroy()` | 销毁监听和光标 DOM |
 
-## Options 参考
+## 配置项参考
 
 ### `StreamMarkdownOptions`
 
@@ -749,17 +774,19 @@ new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOpti
 
 ### `StreamingMarkdownControllerChunkMeta`
 
+在 `TypewriterChunkMeta` 的基础上新增：
+
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `patches` | `RenderPatch[]` | 当前 chunk 渲染产生的 DOM patch |
-| `...TypewriterChunkMeta` | `TypewriterChunkMeta` | 同时包含标准的打字机 chunk 元数据 |
 
 ### `StreamingMarkdownControllerCompleteMeta`
+
+在 `TypewriterEventMeta` 的基础上新增：
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `patches` | `RenderPatch[]` | `renderer.finalize()` 产生的最终 DOM patch |
-| `...TypewriterEventMeta` | `TypewriterEventMeta` | 同时包含完成事件的标准元数据 |
 
 ### `TypewriterCursorOptions`
 
@@ -818,7 +845,7 @@ demo 页面可以直接验证：
 - block 快照和稳定块数量
 - 打字机播放与光标跟随
 - 代码高亮、自定义容器、数学公式
-- `IncrementalDomRenderer` 驱动的浏览器局部更新
+- `StreamingMarkdownController` 驱动的浏览器局部更新
 
 ## 安全说明
 
