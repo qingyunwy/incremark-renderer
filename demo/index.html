@@ -51,6 +51,14 @@
             <span>打字基础节奏（ms）</span>
             <input id="play-interval" type="number" min="8" step="2" value="17" />
           </label>
+          <label class="field compact">
+            <span>光标样式</span>
+            <select id="cursor-variant">
+              <option value="none">None 无光标</option>
+              <option value="bar">Bar 条形</option>
+              <option value="circle">Circle 小球</option>
+            </select>
+          </label>
           <button id="reset-button" type="button">重置</button>
           <button id="step-button" type="button">追加一段</button>
           <button id="play-button" type="button">自动播放</button>

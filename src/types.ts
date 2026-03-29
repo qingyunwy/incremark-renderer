@@ -186,6 +186,42 @@ export interface TypewriterOptions {
 export interface TypewriterCursorOptions {
   className?: string;
   autoScroll?: boolean;
+  variant?: TypewriterCursorVariant;
+}
+
+export type TypewriterCursorVariant = 'bar' | 'circle';
+
+export type StreamingMarkdownControllerTypewriterOptions = Omit<
+  TypewriterOptions,
+  | 'onChunk'
+  | 'onComplete'
+  | 'onPause'
+  | 'onResume'
+  | 'onStart'
+  | 'onStateChange'
+  | 'onStop'
+>;
+
+export interface StreamingMarkdownControllerChunkMeta extends TypewriterChunkMeta {
+  patches: RenderPatch[];
+}
+
+export interface StreamingMarkdownControllerCompleteMeta extends TypewriterEventMeta {
+  patches: RenderPatch[];
+}
+
+export interface StreamingMarkdownControllerOptions {
+  renderer?: StreamMarkdownOptions;
+  typewriter?: StreamingMarkdownControllerTypewriterOptions;
+  cursor?: TypewriterCursorOptions | boolean;
+  autoStart?: boolean;
+  autoFinalize?: boolean;
+  onChunk?: (chunk: string, meta: StreamingMarkdownControllerChunkMeta) => void;
+  onComplete?: (meta: StreamingMarkdownControllerCompleteMeta) => void;
+  onPause?: (meta: TypewriterEventMeta) => void;
+  onResume?: (meta: TypewriterEventMeta) => void;
+  onStart?: (meta: TypewriterEventMeta) => void;
+  onStateChange?: (meta: TypewriterEventMeta) => void;
 }
 
 export interface MathRenderOptions {

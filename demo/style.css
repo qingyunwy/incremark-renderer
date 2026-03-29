@@ -126,6 +126,7 @@ button:disabled {
 
 .field textarea,
 .field input,
+.field select,
 button {
   border-radius: 16px;
   border: 1px solid var(--line);
@@ -133,7 +134,8 @@ button {
 }
 
 .field textarea,
-.field input {
+.field input,
+.field select {
   width: 100%;
   background: rgba(255, 255, 255, 0.78);
   color: var(--ink);
@@ -468,13 +470,17 @@ button:hover {
   top: 0;
   left: 0;
   z-index: 3;
-  width: 0.16rem;
   border-radius: 999px;
   background: linear-gradient(180deg, #c45b2d 0%, #f2b15a 100%);
   box-shadow: 0 0 0 1px rgba(196, 91, 45, 0.12), 0 0 18px rgba(196, 91, 45, 0.25);
   pointer-events: none;
   animation: incremarkCursorBlink 1s steps(1) infinite;
-  transition: transform 90ms linear, height 90ms linear;
+  transition: transform 90ms linear, width 90ms linear, height 90ms linear;
+}
+
+.preview .incremark-typewriter-cursor[data-incremark-cursor-variant="circle"] {
+  background: radial-gradient(circle at 35% 35%, #ffd38f 0%, #e58a3b 34%, #c45b2d 72%, #a1451d 100%);
+  box-shadow: 0 0 0 1px rgba(196, 91, 45, 0.16), 0 0 22px rgba(196, 91, 45, 0.32);
 }
 
 .preview .incremark-typewriter-cursor[hidden] {

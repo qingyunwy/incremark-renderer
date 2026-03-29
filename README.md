@@ -58,6 +58,7 @@ npm install incremark-renderer
 | --- | --- |
 | Real-time streaming Markdown, framework-agnostic | `StreamMarkdownRenderer` |
 | Real-time streaming Markdown directly into the browser DOM | `IncrementalDomRenderer` |
+| Browser-side streaming with built-in typewriter playback and cursor | `StreamingMarkdownController` |
 | Full Markdown string already available, only need HTML | `renderMarkdownToString()` |
 | Full Markdown string already available, also need blocks and snapshot | `renderMarkdown()` |
 | Need typewriter-style playback for a known full string | `MarkdownTypewriter` |
@@ -94,7 +95,33 @@ renderer.append('ial paragraph');
 renderer.finalize();
 ```
 
-### 3. Full Render
+### 3. Browser Stream with Typewriter
+
+```ts
+import { StreamingMarkdownController } from 'incremark-renderer';
+
+const root = document.getElementById('app');
+const controller = new StreamingMarkdownController(root, {
+  cursor: {
+    variant: 'circle',
+  },
+  typewriter: {
+    baseDelayMs: 26,
+    minChunkSize: 1,
+    maxChunkSize: 12,
+  },
+});
+
+upstream.on('data', (chunk) => {
+  controller.push(chunk);
+});
+
+upstream.on('end', () => {
+  controller.close();
+});
+```
+
+### 4. Full Render
 
 ```ts
 import { renderMarkdownToString } from 'incremark-renderer';
@@ -325,6 +352,40 @@ Important: custom HTML returned by `container.render`, `highlight.renderHeader`,
 
 ### Typewriter Playback
 
+If you want the browser DOM renderer, streaming typewriter, and cursor already wired together, use `StreamingMarkdownController`:
+
+```ts
+import { StreamingMarkdownController } from 'incremark-renderer';
+
+const root = document.getElementById('app');
+const controller = new StreamingMarkdownController(root, {
+  cursor: {
+    variant: 'circle',
+  },
+  renderer: {
+    highlight: {
+      renderHeader: ({ code, defaultHeaderContent }) =>
+        `${defaultHeaderContent}<button data-copy="${encodeURIComponent(code)}">Copy</button>`,
+    },
+  },
+  typewriter: {
+    baseDelayMs: 26,
+    minChunkSize: 1,
+    maxChunkSize: 12,
+  },
+});
+
+upstream.on('data', (chunk) => {
+  controller.push(chunk);
+});
+
+upstream.on('end', () => {
+  controller.close();
+});
+```
+
+If you need lower-level control, the original building blocks are still available:
+
 Use `MarkdownTypewriter` when the full Markdown string is already known:
 
 ```ts
@@ -401,6 +462,7 @@ upstream.on('end', () => {
 | `renderMarkdown` | function | Full render to `{ html, blocks, snapshot }` |
 | `StreamMarkdownRenderer` | class | Framework-agnostic incremental renderer |
 | `IncrementalDomRenderer` | class | Browser DOM renderer with partial updates |
+| `StreamingMarkdownController` | class | Browser-side controller that bundles DOM rendering, typewriter playback, and cursor handling |
 | `MarkdownTypewriter` | class | Typewriter playback for a known full string |
 | `StreamingMarkdownTypewriter` | class | Typewriter playback for a live stream |
 | `TypewriterCursorController` | class | Cursor-follow utility for browser UIs |
@@ -453,6 +515,36 @@ new IncrementalDomRenderer(root: HTMLElement, options?: StreamMarkdownOptions)
 | `reset()` | Clear renderer state and empty the root node |
 | `getBlocks()` | Return current visible blocks |
 | `renderToString()` | Return current rendered HTML as a string |
+
+### `StreamingMarkdownController`
+
+#### Constructor
+
+```ts
+new StreamingMarkdownController(
+  root: HTMLElement,
+  options?: StreamingMarkdownControllerOptions,
+)
+```
+
+#### Methods
+
+| Method | Description |
+| --- | --- |
+| `push(chunk: string)` | Push upstream text into the internal typewriter buffer and auto-start by default |
+| `close()` | Mark the upstream source as closed and finalize the DOM on completion by default |
+| `start()` | Start playback manually |
+| `pause()` | Pause playback |
+| `resume()` | Resume playback |
+| `setTypewriterOptions(options)` | Replace typewriter cadence settings and reset the buffered playback state |
+| `reset()` | Clear renderer state, clear the root node, and recreate the internal typewriter |
+| `isClosed()` | Return whether the current upstream source is closed |
+| `isRunning()` | Return whether playback is currently active |
+| `getBlocks()` | Return current visible blocks |
+| `renderToString()` | Return current rendered HTML as a string |
+| `destroy()` | Stop playback and remove cursor listeners |
+
+Escape hatches: `controller.renderer`, `controller.typewriter`, and `controller.cursorController` expose the underlying low-level instances when you need custom wiring.
 
 ### `MarkdownTypewriter`
 
@@ -600,6 +692,22 @@ new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOpti
 | `onBlockParsed` | `(block: StableBlock) => StableBlock \| void` | Hook after a block is parsed and rendered |
 | `onPatchesComputed` | `(patches: RenderPatch[], snapshot: StreamRendererSnapshot) => void` | Hook after patches are computed |
 
+### `StreamingMarkdownControllerOptions`
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `renderer` | `StreamMarkdownOptions` | `{}` | Pass-through options for the internal `IncrementalDomRenderer` |
+| `typewriter` | `StreamingMarkdownControllerTypewriterOptions` | `{}` | Typewriter timing options without lifecycle callbacks |
+| `cursor` | `TypewriterCursorOptions \| boolean` | `true` | Enable the built-in cursor or override its options |
+| `autoStart` | `boolean` | `true` | Automatically start playback on the first `push()` or `close()` |
+| `autoFinalize` | `boolean` | `true` | Call `renderer.finalize()` when playback completes |
+| `onChunk` | `(chunk, meta) => void` | `undefined` | Called after each emitted chunk is rendered into the DOM |
+| `onComplete` | `(meta) => void` | `undefined` | Called after playback completes and final DOM patches are applied |
+| `onPause` | `(meta) => void` | `undefined` | Called when playback pauses |
+| `onResume` | `(meta) => void` | `undefined` | Called when playback resumes |
+| `onStart` | `(meta) => void` | `undefined` | Called when playback starts |
+| `onStateChange` | `(meta) => void` | `undefined` | Called whenever the playback state changes |
+
 ### `TypewriterOptions`
 
 | Option | Type | Default | Description |
@@ -639,12 +747,27 @@ new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOpti
 | `inCodeFence` | `boolean` | Whether the current visible output is inside a fenced code block |
 | `lastChunk` | `string \| undefined` | Last emitted chunk if the transition was triggered by output |
 
+### `StreamingMarkdownControllerChunkMeta`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `patches` | `RenderPatch[]` | DOM patches produced by the chunk render |
+| `...TypewriterChunkMeta` | `TypewriterChunkMeta` | Includes all standard typewriter chunk fields |
+
+### `StreamingMarkdownControllerCompleteMeta`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `patches` | `RenderPatch[]` | Final DOM patches produced by `renderer.finalize()` |
+| `...TypewriterEventMeta` | `TypewriterEventMeta` | Includes the completion event fields |
+
 ### `TypewriterCursorOptions`
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `className` | `string` | `'incremark-typewriter-cursor'` | Custom cursor class name |
 | `autoScroll` | `boolean` | `true` | Auto-scroll the container to keep the cursor visible |
+| `variant` | `'bar' \| 'circle'` | `'bar'` | Built-in cursor geometry preset |
 
 ## Core Data Structures
 

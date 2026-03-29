@@ -1,4 +1,4 @@
-import type { TypewriterCursorOptions } from './types.js';
+import type { TypewriterCursorOptions, TypewriterCursorVariant } from './types.js';
 
 interface CaretMetrics {
   rect: DOMRect;
@@ -24,6 +24,15 @@ function getCursorLineHeight(element: HTMLElement): number {
 function getCursorFontSize(element: HTMLElement): number {
   const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
   return Number.isFinite(fontSize) ? fontSize : 16;
+}
+
+function getBarCursorWidth(height: number): number {
+  return Math.max(2, Math.min(4, Math.round(height * 0.12)));
+}
+
+function getCircleCursorDiameter(height: number, fontSize: number, rectHeight: number): number {
+  const sizeBasis = Math.max(height, fontSize, rectHeight);
+  return Math.max(10, Math.min(30, Math.round(sizeBasis * 0.46)));
 }
 
 function needsMarkerMeasurement(node: Node): boolean {
@@ -131,15 +140,18 @@ export class TypewriterCursorController {
   private readonly root: HTMLElement;
   private readonly cursor: HTMLSpanElement;
   private readonly autoScroll: boolean;
+  private readonly variant: TypewriterCursorVariant;
   private frame: number | null = null;
   private visible = false;
 
   public constructor(root: HTMLElement, options: TypewriterCursorOptions = {}) {
     this.root = root;
     this.autoScroll = options.autoScroll ?? true;
+    this.variant = options.variant ?? 'bar';
     this.cursor = document.createElement('span');
     this.cursor.className = options.className ?? 'incremark-typewriter-cursor';
     this.cursor.setAttribute('aria-hidden', 'true');
+    this.cursor.dataset.incremarkCursorVariant = this.variant;
 
     if (getComputedStyle(this.root).position === 'static') {
       this.root.style.position = 'relative';
@@ -153,6 +165,7 @@ export class TypewriterCursorController {
 
   public show(): void {
     this.visible = true;
+    this.ensureAttached();
     this.cursor.hidden = false;
     this.update();
   }
@@ -167,6 +180,8 @@ export class TypewriterCursorController {
       return;
     }
 
+    this.ensureAttached();
+
     if (this.frame !== null) {
       cancelAnimationFrame(this.frame);
     }
@@ -179,18 +194,29 @@ export class TypewriterCursorController {
       const fontSize = metrics?.fontSize ?? 16;
       const rectHeight = rect?.height ?? fontSize;
       const height = Math.max(18, Math.min(lineHeight, Math.max(fontSize, rectHeight * 0.92)));
+      const width = this.variant === 'circle'
+        ? getCircleCursorDiameter(height, fontSize, rectHeight)
+        : getBarCursorWidth(height);
+      const inlineOffset = this.variant === 'circle'
+        ? Math.max(3, Math.round(width * 0.18))
+        : 2;
       const top = rect
         ? rect.top - rootRect.top + this.root.scrollTop + ((rectHeight - height) / 2)
         : this.root.scrollTop + 8 + Math.max(0, (lineHeight - height) / 2);
       const left = rect
-        ? rect.right - rootRect.left + this.root.scrollLeft + 2
+        ? rect.right - rootRect.left + this.root.scrollLeft + inlineOffset
         : this.root.scrollLeft + 8;
+      const resolvedHeight = this.variant === 'circle' ? width : height;
+      const resolvedTop = this.variant === 'circle'
+        ? top + Math.max(0, (height - resolvedHeight) / 2)
+        : top;
 
-      this.cursor.style.transform = `translate3d(${left}px, ${top}px, 0)`;
-      this.cursor.style.height = `${height}px`;
+      this.cursor.style.transform = `translate3d(${left}px, ${resolvedTop}px, 0)`;
+      this.cursor.style.width = `${width}px`;
+      this.cursor.style.height = `${resolvedHeight}px`;
 
       if (this.autoScroll) {
-        const cursorBottom = top + height;
+        const cursorBottom = resolvedTop + resolvedHeight;
         const viewBottom = this.root.scrollTop + this.root.clientHeight;
         if (cursorBottom > viewBottom - 24) {
           this.root.scrollTop = cursorBottom - this.root.clientHeight + 24;
@@ -212,4 +238,10 @@ export class TypewriterCursorController {
   private readonly handleViewportChange = (): void => {
     this.update();
   };
+
+  private ensureAttached(): void {
+    if (this.cursor.parentElement !== this.root) {
+      this.root.append(this.cursor);
+    }
+  }
 }

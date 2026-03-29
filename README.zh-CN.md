@@ -58,6 +58,7 @@ npm install incremark-renderer
 | --- | --- |
 | 真实流式 Markdown，且不依赖 DOM | `StreamMarkdownRenderer` |
 | 真实流式 Markdown，直接渲染到浏览器 DOM | `IncrementalDomRenderer` |
+| 浏览器侧一站式流式渲染，内置打字机和光标 | `StreamingMarkdownController` |
 | 已经拿到完整 Markdown，只想要 HTML | `renderMarkdownToString()` |
 | 已经拿到完整 Markdown，还想拿 blocks 和 snapshot | `renderMarkdown()` |
 | 已经有完整字符串，只是想做打字机回放 | `MarkdownTypewriter` |
@@ -94,7 +95,33 @@ renderer.append('ial 内容');
 renderer.finalize();
 ```
 
-### 3. 全量渲染
+### 3. 浏览器流式打字机
+
+```ts
+import { StreamingMarkdownController } from 'incremark-renderer';
+
+const root = document.getElementById('app');
+const controller = new StreamingMarkdownController(root, {
+  cursor: {
+    variant: 'circle',
+  },
+  typewriter: {
+    baseDelayMs: 26,
+    minChunkSize: 1,
+    maxChunkSize: 12,
+  },
+});
+
+upstream.on('data', (chunk) => {
+  controller.push(chunk);
+});
+
+upstream.on('end', () => {
+  controller.close();
+});
+```
+
+### 4. 全量渲染
 
 ```ts
 import { renderMarkdownToString } from 'incremark-renderer';
@@ -325,6 +352,40 @@ const renderer = new StreamMarkdownRenderer({
 
 ### 打字机播放
 
+如果你想直接拿到“浏览器 DOM 渲染 + 流式打字机 + 光标跟随”这一整套默认组合，可以直接使用 `StreamingMarkdownController`：
+
+```ts
+import { StreamingMarkdownController } from 'incremark-renderer';
+
+const root = document.getElementById('app');
+const controller = new StreamingMarkdownController(root, {
+  cursor: {
+    variant: 'circle',
+  },
+  renderer: {
+    highlight: {
+      renderHeader: ({ code, defaultHeaderContent }) =>
+        `${defaultHeaderContent}<button data-copy="${encodeURIComponent(code)}">Copy</button>`,
+    },
+  },
+  typewriter: {
+    baseDelayMs: 26,
+    minChunkSize: 1,
+    maxChunkSize: 12,
+  },
+});
+
+upstream.on('data', (chunk) => {
+  controller.push(chunk);
+});
+
+upstream.on('end', () => {
+  controller.close();
+});
+```
+
+如果你需要更底层的控制，原来的几个基础类仍然可以继续手动组合：
+
 如果你已经拿到完整 Markdown，可以使用 `MarkdownTypewriter`：
 
 ```ts
@@ -401,6 +462,7 @@ upstream.on('end', () => {
 | `renderMarkdown` | function | 全量渲染并返回 `{ html, blocks, snapshot }` |
 | `StreamMarkdownRenderer` | class | 与框架无关的增量渲染器 |
 | `IncrementalDomRenderer` | class | 浏览器 DOM 增量渲染器 |
+| `StreamingMarkdownController` | class | 浏览器侧高层控制器，内置 DOM 渲染、打字机播放和光标处理 |
 | `MarkdownTypewriter` | class | 已知完整字符串的打字机回放 |
 | `StreamingMarkdownTypewriter` | class | 实时流式输入的打字机 |
 | `TypewriterCursorController` | class | 浏览器打字光标控制器 |
@@ -453,6 +515,36 @@ new IncrementalDomRenderer(root: HTMLElement, options?: StreamMarkdownOptions)
 | `reset()` | 清空状态并清空 root |
 | `getBlocks()` | 返回当前可见 blocks |
 | `renderToString()` | 返回当前 HTML 字符串 |
+
+### `StreamingMarkdownController`
+
+#### 构造函数
+
+```ts
+new StreamingMarkdownController(
+  root: HTMLElement,
+  options?: StreamingMarkdownControllerOptions,
+)
+```
+
+#### 方法
+
+| 方法 | 说明 |
+| --- | --- |
+| `push(chunk: string)` | 向内部打字机缓冲区追加文本，默认会自动开始播放 |
+| `close()` | 标记上游结束，并在播放完成后默认自动执行 DOM `finalize()` |
+| `start()` | 手动开始播放 |
+| `pause()` | 暂停播放 |
+| `resume()` | 恢复播放 |
+| `setTypewriterOptions(options)` | 替换打字机节奏配置，并重置当前缓冲中的播放状态 |
+| `reset()` | 清空渲染状态、清空 root，并重建内部打字机 |
+| `isClosed()` | 返回当前上游是否已结束 |
+| `isRunning()` | 返回当前是否正在播放 |
+| `getBlocks()` | 返回当前可见 blocks |
+| `renderToString()` | 返回当前 HTML 字符串 |
+| `destroy()` | 停止播放并移除光标监听 |
+
+兜底入口：`controller.renderer`、`controller.typewriter`、`controller.cursorController` 会暴露底层实例，方便你在需要时继续做定制。
 
 ### `MarkdownTypewriter`
 
@@ -600,6 +692,22 @@ new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOpti
 | `onBlockParsed` | `(block: StableBlock) => StableBlock \| void` | block 解析和渲染完成后的 hook |
 | `onPatchesComputed` | `(patches: RenderPatch[], snapshot: StreamRendererSnapshot) => void` | patch 计算完成后的 hook |
 
+### `StreamingMarkdownControllerOptions`
+
+| 选项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `renderer` | `StreamMarkdownOptions` | `{}` | 透传给内部 `IncrementalDomRenderer` 的配置 |
+| `typewriter` | `StreamingMarkdownControllerTypewriterOptions` | `{}` | 不包含生命周期回调的打字机节奏配置 |
+| `cursor` | `TypewriterCursorOptions \| boolean` | `true` | 是否启用内置光标，或覆盖其配置 |
+| `autoStart` | `boolean` | `true` | 首次 `push()` 或 `close()` 时是否自动开始播放 |
+| `autoFinalize` | `boolean` | `true` | 播放完成后是否自动调用 `renderer.finalize()` |
+| `onChunk` | `(chunk, meta) => void` | `undefined` | 每个 chunk 渲染进 DOM 后触发 |
+| `onComplete` | `(meta) => void` | `undefined` | 播放完成且最终 DOM patch 应用后触发 |
+| `onPause` | `(meta) => void` | `undefined` | 暂停时触发 |
+| `onResume` | `(meta) => void` | `undefined` | 恢复时触发 |
+| `onStart` | `(meta) => void` | `undefined` | 开始时触发 |
+| `onStateChange` | `(meta) => void` | `undefined` | 播放状态变化时触发 |
+
 ### `TypewriterOptions`
 
 | 选项 | 类型 | 默认值 | 说明 |
@@ -639,12 +747,27 @@ new TypewriterCursorController(root: HTMLElement, options?: TypewriterCursorOpti
 | `inCodeFence` | `boolean` | 当前可见输出是否处于 fenced code block 内 |
 | `lastChunk` | `string \| undefined` | 如果状态变化由一次真实输出触发，这里会带上最后一次 chunk |
 
+### `StreamingMarkdownControllerChunkMeta`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `patches` | `RenderPatch[]` | 当前 chunk 渲染产生的 DOM patch |
+| `...TypewriterChunkMeta` | `TypewriterChunkMeta` | 同时包含标准的打字机 chunk 元数据 |
+
+### `StreamingMarkdownControllerCompleteMeta`
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `patches` | `RenderPatch[]` | `renderer.finalize()` 产生的最终 DOM patch |
+| `...TypewriterEventMeta` | `TypewriterEventMeta` | 同时包含完成事件的标准元数据 |
+
 ### `TypewriterCursorOptions`
 
 | 选项 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
 | `className` | `string` | `'incremark-typewriter-cursor'` | 自定义光标 class |
 | `autoScroll` | `boolean` | `true` | 是否自动滚动以保持光标可见 |
+| `variant` | `'bar' \| 'circle'` | `'bar'` | 内置光标几何样式预设 |
 
 ## 核心数据结构
 

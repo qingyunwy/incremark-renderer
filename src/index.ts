@@ -8,6 +8,7 @@ export { createHighlightExtension } from './highlight.js';
 export { createMathExtension } from './math.js';
 export { DefaultBlockRenderer, wrapBlockHtml } from './renderers.js';
 export { StreamMarkdownRenderer } from './stream-markdown.js';
+export { StreamingMarkdownController } from './streaming-controller.js';
 export { TypewriterCursorController } from './typewriter-cursor.js';
 export { MarkdownTypewriter, StreamingMarkdownTypewriter } from './typewriter.js';
 export type {
@@ -33,9 +34,14 @@ export type {
   StreamMarkdownOptions,
   StreamMarkdownPlugin,
   StreamRendererSnapshot,
+  StreamingMarkdownControllerChunkMeta,
+  StreamingMarkdownControllerCompleteMeta,
+  StreamingMarkdownControllerOptions,
+  StreamingMarkdownControllerTypewriterOptions,
   TypewriterChunkMeta,
   TypewriterEventMeta,
   TypewriterCursorOptions,
+  TypewriterCursorVariant,
   TypewriterOptions,
   TypewriterState,
   TokensList,

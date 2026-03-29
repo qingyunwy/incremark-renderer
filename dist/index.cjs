@@ -34,6 +34,7 @@ __export(index_exports, {
   IncrementalDomRenderer: () => IncrementalDomRenderer,
   MarkdownTypewriter: () => MarkdownTypewriter,
   StreamMarkdownRenderer: () => StreamMarkdownRenderer,
+  StreamingMarkdownController: () => StreamingMarkdownController,
   StreamingMarkdownTypewriter: () => StreamingMarkdownTypewriter,
   TypewriterCursorController: () => TypewriterCursorController,
   createContainerExtension: () => createContainerExtension,
@@ -1267,6 +1268,13 @@ function getCursorFontSize(element) {
   const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
   return Number.isFinite(fontSize) ? fontSize : 16;
 }
+function getBarCursorWidth(height) {
+  return Math.max(2, Math.min(4, Math.round(height * 0.12)));
+}
+function getCircleCursorDiameter(height, fontSize, rectHeight) {
+  const sizeBasis = Math.max(height, fontSize, rectHeight);
+  return Math.max(10, Math.min(30, Math.round(sizeBasis * 0.46)));
+}
 function needsMarkerMeasurement(node) {
   if (node.nodeType !== Node.TEXT_NODE) {
     return true;
@@ -1351,14 +1359,17 @@ var TypewriterCursorController = class {
   root;
   cursor;
   autoScroll;
+  variant;
   frame = null;
   visible = false;
   constructor(root, options = {}) {
     this.root = root;
     this.autoScroll = options.autoScroll ?? true;
+    this.variant = options.variant ?? "bar";
     this.cursor = document.createElement("span");
     this.cursor.className = options.className ?? "incremark-typewriter-cursor";
     this.cursor.setAttribute("aria-hidden", "true");
+    this.cursor.dataset.incremarkCursorVariant = this.variant;
     if (getComputedStyle(this.root).position === "static") {
       this.root.style.position = "relative";
     }
@@ -1369,6 +1380,7 @@ var TypewriterCursorController = class {
   }
   show() {
     this.visible = true;
+    this.ensureAttached();
     this.cursor.hidden = false;
     this.update();
   }
@@ -1380,6 +1392,7 @@ var TypewriterCursorController = class {
     if (!this.visible) {
       return;
     }
+    this.ensureAttached();
     if (this.frame !== null) {
       cancelAnimationFrame(this.frame);
     }
@@ -1391,12 +1404,17 @@ var TypewriterCursorController = class {
       const fontSize = metrics?.fontSize ?? 16;
       const rectHeight = rect?.height ?? fontSize;
       const height = Math.max(18, Math.min(lineHeight, Math.max(fontSize, rectHeight * 0.92)));
+      const width = this.variant === "circle" ? getCircleCursorDiameter(height, fontSize, rectHeight) : getBarCursorWidth(height);
+      const inlineOffset = this.variant === "circle" ? Math.max(3, Math.round(width * 0.18)) : 2;
       const top = rect ? rect.top - rootRect.top + this.root.scrollTop + (rectHeight - height) / 2 : this.root.scrollTop + 8 + Math.max(0, (lineHeight - height) / 2);
-      const left = rect ? rect.right - rootRect.left + this.root.scrollLeft + 2 : this.root.scrollLeft + 8;
-      this.cursor.style.transform = `translate3d(${left}px, ${top}px, 0)`;
-      this.cursor.style.height = `${height}px`;
+      const left = rect ? rect.right - rootRect.left + this.root.scrollLeft + inlineOffset : this.root.scrollLeft + 8;
+      const resolvedHeight = this.variant === "circle" ? width : height;
+      const resolvedTop = this.variant === "circle" ? top + Math.max(0, (height - resolvedHeight) / 2) : top;
+      this.cursor.style.transform = `translate3d(${left}px, ${resolvedTop}px, 0)`;
+      this.cursor.style.width = `${width}px`;
+      this.cursor.style.height = `${resolvedHeight}px`;
       if (this.autoScroll) {
-        const cursorBottom = top + height;
+        const cursorBottom = resolvedTop + resolvedHeight;
         const viewBottom = this.root.scrollTop + this.root.clientHeight;
         if (cursorBottom > viewBottom - 24) {
           this.root.scrollTop = cursorBottom - this.root.clientHeight + 24;
@@ -1416,6 +1434,11 @@ var TypewriterCursorController = class {
   handleViewportChange = () => {
     this.update();
   };
+  ensureAttached() {
+    if (this.cursor.parentElement !== this.root) {
+      this.root.append(this.cursor);
+    }
+  }
 };
 
 // src/typewriter.ts
@@ -1728,12 +1751,205 @@ var StreamingMarkdownTypewriter = class extends BaseMarkdownTypewriter {
     return this.closed;
   }
 };
+
+// src/streaming-controller.ts
+function normalizeCursorOptions(options) {
+  if (options.cursor === false) {
+    return null;
+  }
+  if (options.cursor === true || options.cursor === void 0) {
+    return {};
+  }
+  return options.cursor;
+}
+var StreamingMarkdownController = class {
+  rendererInstance;
+  cursorInstance;
+  autoStart;
+  autoFinalize;
+  callbacks;
+  typewriterOptions;
+  typewriterInstance;
+  hasStarted = false;
+  destroyed = false;
+  suppressLifecycleCallbacks = false;
+  constructor(root, options = {}) {
+    this.autoStart = options.autoStart ?? true;
+    this.autoFinalize = options.autoFinalize ?? true;
+    this.callbacks = {
+      onChunk: options.onChunk,
+      onComplete: options.onComplete,
+      onPause: options.onPause,
+      onResume: options.onResume,
+      onStart: options.onStart,
+      onStateChange: options.onStateChange
+    };
+    this.typewriterOptions = options.typewriter ?? {};
+    this.rendererInstance = new IncrementalDomRenderer(root, options.renderer ?? {});
+    const cursorOptions = normalizeCursorOptions(options);
+    this.cursorInstance = cursorOptions ? new TypewriterCursorController(root, cursorOptions) : null;
+    this.typewriterInstance = this.createTypewriter();
+  }
+  get renderer() {
+    return this.rendererInstance;
+  }
+  get cursorController() {
+    return this.cursorInstance;
+  }
+  get typewriter() {
+    return this.typewriterInstance;
+  }
+  start() {
+    this.ensureAlive();
+    this.hasStarted = true;
+    this.typewriterInstance.start();
+  }
+  pause() {
+    this.ensureAlive();
+    this.typewriterInstance.pause();
+  }
+  resume() {
+    this.ensureAlive();
+    this.typewriterInstance.resume();
+  }
+  push(chunk) {
+    this.ensureAlive();
+    this.typewriterInstance.push(chunk);
+    if (this.autoStart && !this.hasStarted) {
+      this.start();
+    }
+  }
+  close() {
+    this.ensureAlive();
+    this.typewriterInstance.close();
+    if (this.autoStart && !this.hasStarted) {
+      this.start();
+    }
+  }
+  setTypewriterOptions(options = {}) {
+    this.ensureAlive();
+    this.stopTypewriterSilently();
+    this.cursorInstance?.hide();
+    this.typewriterOptions = options;
+    this.typewriterInstance = this.createTypewriter();
+    this.hasStarted = false;
+  }
+  reset() {
+    this.ensureAlive();
+    this.stopTypewriterSilently();
+    this.rendererInstance.reset();
+    this.cursorInstance?.hide();
+    this.typewriterInstance = this.createTypewriter();
+    this.hasStarted = false;
+  }
+  isRunning() {
+    this.ensureAlive();
+    return this.typewriterInstance.isRunning();
+  }
+  isClosed() {
+    this.ensureAlive();
+    return this.typewriterInstance.isClosed();
+  }
+  getBlocks() {
+    this.ensureAlive();
+    return this.rendererInstance.getBlocks();
+  }
+  renderToString() {
+    this.ensureAlive();
+    return this.rendererInstance.renderToString();
+  }
+  destroy() {
+    if (this.destroyed) {
+      return;
+    }
+    this.stopTypewriterSilently();
+    this.cursorInstance?.destroy();
+    this.destroyed = true;
+  }
+  createTypewriter() {
+    return new StreamingMarkdownTypewriter({
+      ...this.typewriterOptions,
+      onChunk: (chunk, meta) => {
+        const patches = this.rendererInstance.append(chunk);
+        this.syncCursor(meta);
+        if (this.suppressLifecycleCallbacks) {
+          return;
+        }
+        const payload = {
+          ...meta,
+          patches
+        };
+        this.callbacks.onChunk?.(chunk, payload);
+      },
+      onComplete: (meta) => {
+        const patches = this.autoFinalize ? this.rendererInstance.finalize() : [];
+        this.cursorInstance?.hide();
+        if (this.suppressLifecycleCallbacks) {
+          return;
+        }
+        const payload = {
+          ...meta,
+          patches
+        };
+        this.callbacks.onComplete?.(payload);
+      },
+      onPause: (meta) => {
+        if (this.suppressLifecycleCallbacks) {
+          return;
+        }
+        this.callbacks.onPause?.(meta);
+      },
+      onResume: (meta) => {
+        this.syncCursor(meta);
+        if (this.suppressLifecycleCallbacks) {
+          return;
+        }
+        this.callbacks.onResume?.(meta);
+      },
+      onStart: (meta) => {
+        this.syncCursor(meta);
+        if (this.suppressLifecycleCallbacks) {
+          return;
+        }
+        this.callbacks.onStart?.(meta);
+      },
+      onStateChange: (meta) => {
+        if (this.suppressLifecycleCallbacks) {
+          return;
+        }
+        this.callbacks.onStateChange?.(meta);
+      }
+    });
+  }
+  syncCursor(meta) {
+    if (!this.cursorInstance) {
+      return;
+    }
+    if (meta.inCodeFence || meta.total === 0) {
+      this.cursorInstance.hide();
+      return;
+    }
+    this.cursorInstance.show();
+    this.cursorInstance.update();
+  }
+  stopTypewriterSilently() {
+    this.suppressLifecycleCallbacks = true;
+    this.typewriterInstance.stop();
+    this.suppressLifecycleCallbacks = false;
+  }
+  ensureAlive() {
+    if (this.destroyed) {
+      throw new Error("StreamingMarkdownController has been destroyed.");
+    }
+  }
+};
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   DefaultBlockRenderer,
   IncrementalDomRenderer,
   MarkdownTypewriter,
   StreamMarkdownRenderer,
+  StreamingMarkdownController,
   StreamingMarkdownTypewriter,
   TypewriterCursorController,
   createContainerExtension,

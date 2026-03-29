@@ -149,6 +149,28 @@ interface TypewriterOptions {
 interface TypewriterCursorOptions {
     className?: string;
     autoScroll?: boolean;
+    variant?: TypewriterCursorVariant;
+}
+type TypewriterCursorVariant = 'bar' | 'circle';
+type StreamingMarkdownControllerTypewriterOptions = Omit<TypewriterOptions, 'onChunk' | 'onComplete' | 'onPause' | 'onResume' | 'onStart' | 'onStateChange' | 'onStop'>;
+interface StreamingMarkdownControllerChunkMeta extends TypewriterChunkMeta {
+    patches: RenderPatch[];
+}
+interface StreamingMarkdownControllerCompleteMeta extends TypewriterEventMeta {
+    patches: RenderPatch[];
+}
+interface StreamingMarkdownControllerOptions {
+    renderer?: StreamMarkdownOptions;
+    typewriter?: StreamingMarkdownControllerTypewriterOptions;
+    cursor?: TypewriterCursorOptions | boolean;
+    autoStart?: boolean;
+    autoFinalize?: boolean;
+    onChunk?: (chunk: string, meta: StreamingMarkdownControllerChunkMeta) => void;
+    onComplete?: (meta: StreamingMarkdownControllerCompleteMeta) => void;
+    onPause?: (meta: TypewriterEventMeta) => void;
+    onResume?: (meta: TypewriterEventMeta) => void;
+    onStart?: (meta: TypewriterEventMeta) => void;
+    onStateChange?: (meta: TypewriterEventMeta) => void;
 }
 interface MathRenderOptions {
     katex?: Omit<KatexOptions, 'displayMode'>;
@@ -225,6 +247,7 @@ declare class TypewriterCursorController {
     private readonly root;
     private readonly cursor;
     private readonly autoScroll;
+    private readonly variant;
     private frame;
     private visible;
     constructor(root: HTMLElement, options?: TypewriterCursorOptions);
@@ -233,6 +256,7 @@ declare class TypewriterCursorController {
     update(): void;
     destroy(): void;
     private readonly handleViewportChange;
+    private ensureAttached;
 }
 
 declare abstract class BaseMarkdownTypewriter {
@@ -276,4 +300,37 @@ declare class StreamingMarkdownTypewriter extends BaseMarkdownTypewriter {
     protected isInputClosed(): boolean;
 }
 
-export { type AstNodePatch, type BlockExtractionResult, type BlockRenderer, type CodeBlockHeaderRenderContext, type CodeBlockHeaderRenderer, type CodeBlockRenderContext, type CodeBlockRenderer, type CodeBlockToken, type CodeHighlightOptions, type ContainerOptions, type ContainerRenderContext, type ContainerRenderer, type ContainerToken, DefaultBlockRenderer, type FullRenderResult, type HtmlSanitizeOptions, type HtmlSanitizer, IncrementalDomRenderer, MarkdownTypewriter, type MathRenderOptions, type RenderPatch, type StableBlock, type StreamMarkdownOptions, type StreamMarkdownPlugin, StreamMarkdownRenderer, type StreamRendererSnapshot, StreamingMarkdownTypewriter, type TokensList, type TypewriterChunkMeta, TypewriterCursorController, type TypewriterCursorOptions, type TypewriterEventMeta, type TypewriterOptions, type TypewriterState, createContainerExtension, createDefaultHtmlSanitizer, createHighlightExtension, createHtmlSanitizer, createMathExtension, diffAst, digestTokens, extractStableBlocks, renderMarkdown, renderMarkdownToString, wrapBlockHtml };
+declare class StreamingMarkdownController {
+    private readonly rendererInstance;
+    private readonly cursorInstance;
+    private readonly autoStart;
+    private readonly autoFinalize;
+    private readonly callbacks;
+    private typewriterOptions;
+    private typewriterInstance;
+    private hasStarted;
+    private destroyed;
+    private suppressLifecycleCallbacks;
+    constructor(root: HTMLElement, options?: StreamingMarkdownControllerOptions);
+    get renderer(): IncrementalDomRenderer;
+    get cursorController(): TypewriterCursorController | null;
+    get typewriter(): StreamingMarkdownTypewriter;
+    start(): void;
+    pause(): void;
+    resume(): void;
+    push(chunk: string): void;
+    close(): void;
+    setTypewriterOptions(options?: StreamingMarkdownControllerTypewriterOptions): void;
+    reset(): void;
+    isRunning(): boolean;
+    isClosed(): boolean;
+    getBlocks(): StableBlock[];
+    renderToString(): string;
+    destroy(): void;
+    private createTypewriter;
+    private syncCursor;
+    private stopTypewriterSilently;
+    private ensureAlive;
+}
+
+export { type AstNodePatch, type BlockExtractionResult, type BlockRenderer, type CodeBlockHeaderRenderContext, type CodeBlockHeaderRenderer, type CodeBlockRenderContext, type CodeBlockRenderer, type CodeBlockToken, type CodeHighlightOptions, type ContainerOptions, type ContainerRenderContext, type ContainerRenderer, type ContainerToken, DefaultBlockRenderer, type FullRenderResult, type HtmlSanitizeOptions, type HtmlSanitizer, IncrementalDomRenderer, MarkdownTypewriter, type MathRenderOptions, type RenderPatch, type StableBlock, type StreamMarkdownOptions, type StreamMarkdownPlugin, StreamMarkdownRenderer, type StreamRendererSnapshot, StreamingMarkdownController, type StreamingMarkdownControllerChunkMeta, type StreamingMarkdownControllerCompleteMeta, type StreamingMarkdownControllerOptions, type StreamingMarkdownControllerTypewriterOptions, StreamingMarkdownTypewriter, type TokensList, type TypewriterChunkMeta, TypewriterCursorController, type TypewriterCursorOptions, type TypewriterCursorVariant, type TypewriterEventMeta, type TypewriterOptions, type TypewriterState, createContainerExtension, createDefaultHtmlSanitizer, createHighlightExtension, createHtmlSanitizer, createMathExtension, diffAst, digestTokens, extractStableBlocks, renderMarkdown, renderMarkdownToString, wrapBlockHtml };

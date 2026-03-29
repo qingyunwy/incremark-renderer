@@ -1,8 +1,4 @@
-import {
-  IncrementalDomRenderer,
-  StreamingMarkdownTypewriter,
-  TypewriterCursorController,
-} from 'incremark-renderer';
+import { StreamingMarkdownController } from 'incremark-renderer';
 
 const sampleMarkdown = `# Incremark Renderer
 
@@ -58,6 +54,7 @@ $$
 const sourceInput = document.querySelector('#source-input');
 const chunkSizeInput = document.querySelector('#chunk-size');
 const playIntervalInput = document.querySelector('#play-interval');
+const cursorVariantInput = document.querySelector('#cursor-variant');
 const consumedValue = document.querySelector('#consumed-value');
 const stableValue = document.querySelector('#stable-value');
 const patchValue = document.querySelector('#patch-value');
@@ -77,6 +74,7 @@ if (
   !(sourceInput instanceof HTMLTextAreaElement) ||
   !(chunkSizeInput instanceof HTMLInputElement) ||
   !(playIntervalInput instanceof HTMLInputElement) ||
+  !(cursorVariantInput instanceof HTMLSelectElement) ||
   !(consumedValue instanceof HTMLElement) ||
   !(stableValue instanceof HTMLElement) ||
   !(patchValue instanceof HTMLElement) ||
@@ -97,11 +95,9 @@ if (
 
 sourceInput.value = sampleMarkdown;
 
-let renderer = createRenderer();
-let typewriterCursor = createTypewriterCursor();
+let streamingController = createStreamingController();
 let cursor = 0;
 let lastDelayMs = 0;
-let typewriter = null;
 let typewriterFeedCursor = 0;
 let typewriterFeedTimer = null;
 let renderMode = 'stream';
@@ -129,23 +125,42 @@ function renderDemoContainer({ type, title, innerHtml }) {
   return `<aside class="demo-callout demo-callout-${sanitizeClassNameSegment(type)}" data-demo-callout="${safeType}"><div class="demo-callout-head"><span class="demo-callout-chip">${safeType}</span>${safeTitle}</div><div class="demo-callout-body">${innerHtml}</div></aside>`;
 }
 
-function createRenderer() {
+function createStreamingController() {
   previewRoot.innerHTML = '';
-  return new IncrementalDomRenderer(previewRoot, {
-    container: {
-      render: renderDemoContainer,
-    },
-    highlight: {
-      renderHeader: ({ code, defaultHeaderContent }) => {
-        const encodedCode = encodeURIComponent(code);
-        return `${defaultHeaderContent}<button type="button" class="incremark-code-action" data-copy-code="${encodedCode}">Copy</button>`;
+  const controller = new StreamingMarkdownController(previewRoot, {
+    cursor: getCursorOptions(),
+    renderer: {
+      container: {
+        render: renderDemoContainer,
+      },
+      highlight: {
+        renderHeader: ({ code, defaultHeaderContent }) => {
+          const encodedCode = encodeURIComponent(code);
+          return `${defaultHeaderContent}<button type="button" class="incremark-code-action" data-copy-code="${encodedCode}">Copy</button>`;
+        },
       },
     },
+    typewriter: {
+      baseDelayMs: getPlayInterval(),
+      minChunkSize: 1,
+      maxChunkSize: getPlaybackChunkSize(),
+    },
+    onChunk: (chunk, meta) => {
+      cursor += chunk.length;
+      lastDelayMs = meta.delayMs;
+      syncStatus(meta.patches);
+    },
+    onComplete: () => {
+      if (typewriterFeedTimer !== null) {
+        clearTimeout(typewriterFeedTimer);
+        typewriterFeedTimer = null;
+      }
+      typewriterFeedCursor = cursor;
+      controller.cursorController?.hide();
+      playButton.textContent = '自动播放';
+    },
   });
-}
-
-function createTypewriterCursor() {
-  return new TypewriterCursorController(previewRoot);
+  return controller;
 }
 
 function getChunkSize() {
@@ -158,6 +173,18 @@ function getPlaybackChunkSize() {
 
 function getPlayInterval() {
   return Math.max(8, Number.parseInt(playIntervalInput.value, 10) || 26);
+}
+
+function getCursorVariant() {
+  return cursorVariantInput.value === 'circle' ? 'circle' : 'bar';
+}
+
+function getCursorOptions() {
+  return cursorVariantInput.value === 'none'
+    ? false
+    : {
+        variant: getCursorVariant(),
+      };
 }
 
 function getFeedInterval() {
@@ -199,7 +226,7 @@ function describePatches(patches) {
 }
 
 function describeBlocks() {
-  const blocks = renderer.getBlocks();
+  const blocks = streamingController.getBlocks();
   if (blocks.length === 0) {
     return 'No visible blocks.';
   }
@@ -213,7 +240,7 @@ function describeBlocks() {
 }
 
 function syncStatus(patches = []) {
-  const snapshot = renderer.getBlocks();
+  const snapshot = streamingController.getBlocks();
   consumedValue.textContent = String(cursor);
   stableValue.textContent = String(snapshot.filter((block) => block.stable).length);
   patchValue.textContent = String(patches.length);
@@ -224,27 +251,20 @@ function syncStatus(patches = []) {
 }
 
 function stopPlayback() {
-  if (typewriter !== null) {
-    typewriter.pause();
-    typewriter = null;
-  }
+  streamingController.pause();
   if (typewriterFeedTimer !== null) {
     clearTimeout(typewriterFeedTimer);
     typewriterFeedTimer = null;
   }
   typewriterFeedCursor = cursor;
-  typewriterCursor.hide();
+  streamingController.cursorController?.hide();
   playButton.textContent = '自动播放';
 }
 
 function pushNextPlaybackChunk(source) {
-  if (typewriter === null) {
-    return;
-  }
-
   if (typewriterFeedCursor >= source.length) {
-    if (!typewriter.isClosed()) {
-      typewriter.close();
+    if (!streamingController.isClosed()) {
+      streamingController.close();
     }
     return;
   }
@@ -252,26 +272,22 @@ function pushNextPlaybackChunk(source) {
   const nextFeedCursor = Math.min(source.length, typewriterFeedCursor + getChunkSize());
   const chunk = source.slice(typewriterFeedCursor, nextFeedCursor);
   typewriterFeedCursor = nextFeedCursor;
-  typewriter.push(chunk);
+  streamingController.push(chunk);
 
   if (typewriterFeedCursor >= source.length) {
-    typewriter.close();
+    streamingController.close();
   }
 }
 
 function scheduleNextPlaybackFeed(source) {
-  if (typewriter === null) {
-    return;
-  }
-
   if (typewriterFeedTimer !== null) {
     clearTimeout(typewriterFeedTimer);
     typewriterFeedTimer = null;
   }
 
   if (typewriterFeedCursor >= source.length) {
-    if (!typewriter.isClosed()) {
-      typewriter.close();
+    if (!streamingController.isClosed()) {
+      streamingController.close();
     }
     return;
   }
@@ -289,54 +305,27 @@ function startPlayback() {
   }
 
   stopPlayback();
-  playButton.textContent = '停止播放';
-
   const source = getSource();
   if (cursor >= source.length) {
+    playButton.textContent = '自动播放';
     return;
   }
 
-  typewriterFeedCursor = cursor;
-  typewriter = new StreamingMarkdownTypewriter({
+  streamingController.setTypewriterOptions({
     baseDelayMs: getPlayInterval(),
     minChunkSize: 1,
-    // Keep the upstream push chunk relatively coarse, but let the typewriter
-    // emit smaller visual chunks so the demo still looks like a real typing flow.
     maxChunkSize: getPlaybackChunkSize(),
-    onChunk: (chunk, meta) => {
-      cursor += chunk.length;
-      lastDelayMs = meta.delayMs;
-      const patches = renderer.append(chunk);
-      syncStatus(patches);
-      if (meta.inCodeFence) {
-        typewriterCursor.hide();
-      } else {
-        typewriterCursor.show();
-        typewriterCursor.update();
-      }
-    },
-    onComplete: () => {
-      typewriter = null;
-      if (typewriterFeedTimer !== null) {
-        clearTimeout(typewriterFeedTimer);
-        typewriterFeedTimer = null;
-      }
-      typewriterFeedCursor = cursor;
-      typewriterCursor.hide();
-      playButton.textContent = '自动播放';
-    },
   });
-  typewriter.start();
-  typewriterCursor.show();
+  typewriterFeedCursor = cursor;
+  playButton.textContent = '停止播放';
   pushNextPlaybackChunk(source);
   scheduleNextPlaybackFeed(source);
 }
 
 function resetDemo() {
   stopPlayback();
-  typewriterCursor.destroy();
-  renderer = createRenderer();
-  typewriterCursor = createTypewriterCursor();
+  streamingController.destroy();
+  streamingController = createStreamingController();
   cursor = 0;
   typewriterFeedCursor = 0;
   typewriterFeedTimer = null;
@@ -349,9 +338,9 @@ function stepDemo() {
     stopPlayback();
     cursor = getSource().length;
     lastDelayMs = 0;
-    const patches = renderer.setMarkdown(getSource());
+    const patches = streamingController.renderer.setMarkdown(getSource());
     syncStatus(patches);
-    typewriterCursor.hide();
+    streamingController.cursorController?.hide();
     return false;
   }
 
@@ -364,18 +353,18 @@ function stepDemo() {
   const chunk = source.slice(cursor, nextCursor);
   cursor = nextCursor;
   lastDelayMs = 0;
-  const patches = renderer.append(chunk);
+  const patches = streamingController.renderer.append(chunk);
   syncStatus(patches);
-  typewriterCursor.hide();
+  streamingController.cursorController?.hide();
   return cursor < source.length;
 }
 
 function finalizeDemo() {
   stopPlayback();
   lastDelayMs = 0;
-  const patches = renderer.finalize();
+  const patches = streamingController.renderer.finalize();
   syncStatus(patches);
-  typewriterCursor.hide();
+  streamingController.cursorController?.hide();
 }
 
 previewRoot.addEventListener('click', async (event) => {
@@ -411,7 +400,7 @@ stepButton.addEventListener('click', () => {
 });
 
 playButton.addEventListener('click', () => {
-  if (typewriter !== null) {
+  if (streamingController.isRunning()) {
     stopPlayback();
     return;
   }
@@ -438,10 +427,11 @@ fullModeButton.addEventListener('click', () => {
   updateModeUi();
 });
 playIntervalInput.addEventListener('input', () => {
-  if (typewriter !== null) {
+  if (streamingController.isRunning()) {
     startPlayback();
   }
 });
+cursorVariantInput.addEventListener('input', resetDemo);
 
 updateModeUi();
 syncStatus();
