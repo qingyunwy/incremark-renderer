@@ -108,7 +108,68 @@
           <div id="preview-root" class="panel preview"></div>
         </article>
       </section>
+
+      <section class="card benchmark">
+        <div class="benchmark-header">
+          <div>
+            <p class="eyebrow">Performance Benchmark</p>
+            <h2>流式性能对比</h2>
+            <p class="benchmark-lede">
+              使用当前 Markdown 输入与 chunk 配置，对比 incremark 的增量渲染路径，以及每次都重新全量解析并整体替换 DOM 的朴素方案。
+            </p>
+          </div>
+
+          <div class="toolbar benchmark-toolbar">
+            <label class="field compact">
+              <span>每组测试轮次</span>
+              <input id="benchmark-runs" type="number" min="1" max="30" value="12" />
+            </label>
+            <button id="benchmark-button" type="button">运行性能对比</button>
+          </div>
+        </div>
+
+        <div class="status-grid benchmark-status">
+          <article class="stat">
+            <span class="stat-label">文本长度</span>
+            <strong id="benchmark-chars-value">0</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">chunk 数量</span>
+            <strong id="benchmark-chunks-value">0</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">轮次</span>
+            <strong id="benchmark-runs-value">0</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">增量平均总耗时</span>
+            <strong id="benchmark-incremental-value">--</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">全量平均总耗时</span>
+            <strong id="benchmark-naive-value">--</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">速度提升</span>
+            <strong id="benchmark-speedup-value">--</strong>
+          </article>
+        </div>
+
+        <div class="grid benchmark-grid">
+          <article class="benchmark-subcard">
+            <h3>结果摘要</h3>
+            <pre id="benchmark-summary" class="panel code"></pre>
+          </article>
+
+          <article class="benchmark-subcard">
+            <h3>原始轮次数据</h3>
+            <pre id="benchmark-log" class="panel code"></pre>
+          </article>
+        </div>
+      </section>
     </main>
+
+    <div id="benchmark-sandbox" class="benchmark-sandbox" aria-hidden="true"></div>
 
     <script type="module" src="/demo/demo.js"></script>
   </body>

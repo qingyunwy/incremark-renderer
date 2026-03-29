@@ -208,6 +208,60 @@ button:hover {
   padding: 18px;
 }
 
+.benchmark {
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.benchmark-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.benchmark-lede {
+  max-width: 760px;
+  margin: 12px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.benchmark-toolbar {
+  align-items: flex-end;
+  margin-top: 0;
+}
+
+.benchmark-status {
+  margin-top: 18px;
+}
+
+.benchmark-status .stat {
+  background: rgba(34, 125, 112, 0.1);
+}
+
+.benchmark-grid {
+  margin-top: 18px;
+}
+
+.benchmark-subcard {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.benchmark-subcard h3 {
+  margin: 0 0 12px;
+  font-family: "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: 1.16rem;
+}
+
+.benchmark-grid .panel {
+  min-height: 240px;
+}
+
 .grid h2 {
   margin-bottom: 14px;
   font-size: 1.35rem;
@@ -487,6 +541,20 @@ button:hover {
   display: none;
 }
 
+.benchmark-sandbox {
+  position: fixed;
+  top: 0;
+  left: -200vw;
+  width: min(720px, calc(100vw - 32px));
+  visibility: hidden;
+  pointer-events: none;
+  contain: layout style paint;
+}
+
+.benchmark-render-root {
+  min-height: 0;
+}
+
 @keyframes incremarkCursorBlink {
   0%, 48% {
     opacity: 1;
@@ -516,6 +584,10 @@ button:hover {
 
   .toolbar {
     flex-direction: column;
+  }
+
+  .benchmark-toolbar {
+    width: 100%;
   }
 
   .compact,

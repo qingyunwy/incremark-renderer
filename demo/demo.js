@@ -1,4 +1,12 @@
-import { StreamingMarkdownController } from 'incremark-renderer';
+import {
+  IncrementalDomRenderer,
+  StreamingMarkdownController,
+  createContainerExtension,
+  createHighlightExtension,
+  createHtmlSanitizer,
+  createMathExtension,
+} from 'incremark-renderer';
+import { Marked } from 'marked';
 
 const sampleMarkdown = `# Incremark Renderer
 
@@ -51,6 +59,14 @@ $$
 | render | partial patch |
 `;
 
+const BENCHMARK_IDLE_SUMMARY = [
+  '点击“运行性能对比”后，这里会展示当前输入文本在流式场景下的性能摘要。',
+  '',
+  '基线方案会在每个 chunk 上都重新执行完整 Markdown 解析，并整体替换 root.innerHTML。',
+].join('\n');
+
+const BENCHMARK_IDLE_LOG = '尚未运行性能对比。';
+
 const sourceInput = document.querySelector('#source-input');
 const chunkSizeInput = document.querySelector('#chunk-size');
 const playIntervalInput = document.querySelector('#play-interval');
@@ -69,6 +85,17 @@ const resetButton = document.querySelector('#reset-button');
 const stepButton = document.querySelector('#step-button');
 const playButton = document.querySelector('#play-button');
 const finalizeButton = document.querySelector('#finalize-button');
+const benchmarkRunsInput = document.querySelector('#benchmark-runs');
+const benchmarkButton = document.querySelector('#benchmark-button');
+const benchmarkCharsValue = document.querySelector('#benchmark-chars-value');
+const benchmarkChunksValue = document.querySelector('#benchmark-chunks-value');
+const benchmarkRunsValue = document.querySelector('#benchmark-runs-value');
+const benchmarkIncrementalValue = document.querySelector('#benchmark-incremental-value');
+const benchmarkNaiveValue = document.querySelector('#benchmark-naive-value');
+const benchmarkSpeedupValue = document.querySelector('#benchmark-speedup-value');
+const benchmarkSummary = document.querySelector('#benchmark-summary');
+const benchmarkLog = document.querySelector('#benchmark-log');
+const benchmarkSandbox = document.querySelector('#benchmark-sandbox');
 
 if (
   !(sourceInput instanceof HTMLTextAreaElement) ||
@@ -88,7 +115,18 @@ if (
   !(resetButton instanceof HTMLButtonElement) ||
   !(stepButton instanceof HTMLButtonElement) ||
   !(playButton instanceof HTMLButtonElement) ||
-  !(finalizeButton instanceof HTMLButtonElement)
+  !(finalizeButton instanceof HTMLButtonElement) ||
+  !(benchmarkRunsInput instanceof HTMLInputElement) ||
+  !(benchmarkButton instanceof HTMLButtonElement) ||
+  !(benchmarkCharsValue instanceof HTMLElement) ||
+  !(benchmarkChunksValue instanceof HTMLElement) ||
+  !(benchmarkRunsValue instanceof HTMLElement) ||
+  !(benchmarkIncrementalValue instanceof HTMLElement) ||
+  !(benchmarkNaiveValue instanceof HTMLElement) ||
+  !(benchmarkSpeedupValue instanceof HTMLElement) ||
+  !(benchmarkSummary instanceof HTMLElement) ||
+  !(benchmarkLog instanceof HTMLElement) ||
+  !(benchmarkSandbox instanceof HTMLElement)
 ) {
   throw new Error('Demo page failed to initialize.');
 }
@@ -101,6 +139,7 @@ let lastDelayMs = 0;
 let typewriterFeedCursor = 0;
 let typewriterFeedTimer = null;
 let renderMode = 'stream';
+let benchmarkRunning = false;
 
 function escapeHtml(value) {
   return value
@@ -125,21 +164,25 @@ function renderDemoContainer({ type, title, innerHtml }) {
   return `<aside class="demo-callout demo-callout-${sanitizeClassNameSegment(type)}" data-demo-callout="${safeType}"><div class="demo-callout-head"><span class="demo-callout-chip">${safeType}</span>${safeTitle}</div><div class="demo-callout-body">${innerHtml}</div></aside>`;
 }
 
+function createDemoRendererOptions() {
+  return {
+    container: {
+      render: renderDemoContainer,
+    },
+    highlight: {
+      renderHeader: ({ code, defaultHeaderContent }) => {
+        const encodedCode = encodeURIComponent(code);
+        return `${defaultHeaderContent}<button type="button" class="incremark-code-action" data-copy-code="${encodedCode}">Copy</button>`;
+      },
+    },
+  };
+}
+
 function createStreamingController() {
   previewRoot.innerHTML = '';
   const controller = new StreamingMarkdownController(previewRoot, {
     cursor: getCursorOptions(),
-    renderer: {
-      container: {
-        render: renderDemoContainer,
-      },
-      highlight: {
-        renderHeader: ({ code, defaultHeaderContent }) => {
-          const encodedCode = encodeURIComponent(code);
-          return `${defaultHeaderContent}<button type="button" class="incremark-code-action" data-copy-code="${encodedCode}">Copy</button>`;
-        },
-      },
-    },
+    renderer: createDemoRendererOptions(),
     typewriter: {
       baseDelayMs: getPlayInterval(),
       minChunkSize: 1,
@@ -163,6 +206,23 @@ function createStreamingController() {
   return controller;
 }
 
+function createNaiveFullRender() {
+  const rendererOptions = createDemoRendererOptions();
+  const marked = new Marked(
+    createMathExtension(),
+    createContainerExtension(rendererOptions.container),
+    createHighlightExtension(rendererOptions.highlight, {
+      highlightEnabled: true,
+    }),
+  );
+  const sanitizeHtml = createHtmlSanitizer({});
+
+  return (markdown) => {
+    const html = marked.parser(marked.lexer(markdown));
+    return sanitizeHtml(html);
+  };
+}
+
 function getChunkSize() {
   return Math.max(1, Number.parseInt(chunkSizeInput.value, 10) || 1);
 }
@@ -173,6 +233,10 @@ function getPlaybackChunkSize() {
 
 function getPlayInterval() {
   return Math.max(8, Number.parseInt(playIntervalInput.value, 10) || 26);
+}
+
+function getBenchmarkRuns() {
+  return Math.max(1, Math.min(30, Number.parseInt(benchmarkRunsInput.value, 10) || 1));
 }
 
 function getCursorVariant() {
@@ -195,6 +259,63 @@ function getSource() {
   return sourceInput.value;
 }
 
+function splitIntoChunks(source, chunkSize) {
+  const chunks = [];
+
+  for (let start = 0; start < source.length; start += chunkSize) {
+    chunks.push(source.slice(start, start + chunkSize));
+  }
+
+  return chunks;
+}
+
+function average(values) {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return total / values.length;
+}
+
+function maxValue(values) {
+  return values.length > 0 ? Math.max(...values) : 0;
+}
+
+function formatDuration(value) {
+  if (!Number.isFinite(value)) {
+    return '--';
+  }
+
+  if (value >= 100) {
+    return `${value.toFixed(1)}ms`;
+  }
+
+  return `${value.toFixed(2)}ms`;
+}
+
+function formatSpeedup(value) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '--';
+  }
+
+  return `${value.toFixed(2)}x`;
+}
+
+function formatPercent(value) {
+  if (!Number.isFinite(value)) {
+    return '--';
+  }
+
+  return `${value.toFixed(1)}%`;
+}
+
+function nextFrame() {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
 function updateModeUi() {
   const isStream = renderMode === 'stream';
   streamModeButton.classList.toggle('is-active', isStream);
@@ -202,7 +323,6 @@ function updateModeUi() {
   streamModeButton.setAttribute('aria-pressed', String(isStream));
   fullModeButton.setAttribute('aria-pressed', String(!isStream));
 
-  chunkSizeInput.disabled = !isStream;
   playIntervalInput.disabled = !isStream;
   playButton.disabled = !isStream;
   finalizeButton.disabled = !isStream;
@@ -248,6 +368,251 @@ function syncStatus(patches = []) {
   streamPreview.textContent = getSource().slice(0, cursor);
   patchLog.textContent = describePatches(patches);
   blocksLog.textContent = describeBlocks();
+}
+
+function syncBenchmarkConfigStats() {
+  const source = getSource();
+  const chunks = splitIntoChunks(source, getChunkSize());
+  benchmarkCharsValue.textContent = String(source.length);
+  benchmarkChunksValue.textContent = String(chunks.length);
+  benchmarkRunsValue.textContent = String(getBenchmarkRuns());
+}
+
+function resetBenchmarkResults(message = BENCHMARK_IDLE_SUMMARY) {
+  benchmarkIncrementalValue.textContent = '--';
+  benchmarkNaiveValue.textContent = '--';
+  benchmarkSpeedupValue.textContent = '--';
+  benchmarkSummary.textContent = message;
+  benchmarkLog.textContent = BENCHMARK_IDLE_LOG;
+  syncBenchmarkConfigStats();
+}
+
+function invalidateBenchmarkResults() {
+  if (benchmarkRunning) {
+    return;
+  }
+
+  resetBenchmarkResults('当前配置已变更，请重新运行性能对比。');
+}
+
+function createBenchmarkRoot() {
+  const root = document.createElement('div');
+  root.className = 'preview benchmark-render-root';
+  benchmarkSandbox.append(root);
+  return root;
+}
+
+function measureIncrementalRun(chunks) {
+  const root = createBenchmarkRoot();
+  const renderer = new IncrementalDomRenderer(root, createDemoRendererOptions());
+  let totalMs = 0;
+  let maxMs = 0;
+  let updateCount = 0;
+
+  for (const chunk of chunks) {
+    const start = performance.now();
+    renderer.append(chunk);
+    const elapsed = performance.now() - start;
+    totalMs += elapsed;
+    maxMs = Math.max(maxMs, elapsed);
+    updateCount += 1;
+  }
+
+  const finalizeStart = performance.now();
+  renderer.finalize();
+  const finalizeElapsed = performance.now() - finalizeStart;
+  totalMs += finalizeElapsed;
+  maxMs = Math.max(maxMs, finalizeElapsed);
+  updateCount += 1;
+
+  root.remove();
+
+  return {
+    totalMs,
+    maxMs,
+    updateCount,
+  };
+}
+
+function measureNaiveRun(chunks, renderFullMarkdown) {
+  const root = createBenchmarkRoot();
+  let totalMs = 0;
+  let maxMs = 0;
+  let updateCount = 0;
+  let source = '';
+
+  for (const chunk of chunks) {
+    source += chunk;
+    const start = performance.now();
+    root.innerHTML = renderFullMarkdown(source);
+    const elapsed = performance.now() - start;
+    totalMs += elapsed;
+    maxMs = Math.max(maxMs, elapsed);
+    updateCount += 1;
+  }
+
+  root.remove();
+
+  return {
+    totalMs,
+    maxMs,
+    updateCount,
+  };
+}
+
+function summarizeBenchmarkRuns(runs) {
+  const totals = runs.map((run) => run.totalMs);
+  const peaks = runs.map((run) => run.maxMs);
+  const updateCount = runs[0]?.updateCount ?? 0;
+  const averageTotalMs = average(totals);
+
+  return {
+    averageTotalMs,
+    averageUpdateMs: updateCount > 0 ? averageTotalMs / updateCount : 0,
+    slowestUpdateMs: maxValue(peaks),
+    updateCount,
+  };
+}
+
+function formatBenchmarkSummary(result) {
+  const reduction = result.naive.averageTotalMs > 0
+    ? (1 - result.incremental.averageTotalMs / result.naive.averageTotalMs) * 100
+    : 0;
+
+  return [
+    '测试方法',
+    `- 输入长度：${result.sourceLength} chars`,
+    `- chunk 大小：${result.chunkSize}`,
+    `- chunk 数量：${result.chunkCount}`,
+    `- 每组轮次：${result.runs}`,
+    '- 增量方案：对每个 chunk 执行 IncrementalDomRenderer.append(chunk)，结束时额外执行 finalize()。',
+    '- 全量方案：对每个 chunk 重新执行完整 Markdown lexer/parser，再整体替换 root.innerHTML。',
+    '',
+    '结果摘要',
+    `- 增量平均总耗时：${formatDuration(result.incremental.averageTotalMs)}`,
+    `- 增量单次平均更新：${formatDuration(result.incremental.averageUpdateMs)}`,
+    `- 增量最慢单次更新：${formatDuration(result.incremental.slowestUpdateMs)}`,
+    `- 全量平均总耗时：${formatDuration(result.naive.averageTotalMs)}`,
+    `- 全量单次平均更新：${formatDuration(result.naive.averageUpdateMs)}`,
+    `- 全量最慢单次更新：${formatDuration(result.naive.slowestUpdateMs)}`,
+    `- 速度提升：${formatSpeedup(result.speedup)}`,
+    `- 总耗时下降：${formatPercent(reduction)}`,
+    '',
+    '说明',
+    '- 统计的是主线程里的同步解析和 DOM 更新耗时，不包含网络与真实绘制时间。',
+    '- 每轮会交替执行先后顺序，尽量减少固定顺序带来的偏差。',
+  ].join('\n');
+}
+
+function formatBenchmarkLog(rounds) {
+  if (rounds.length === 0) {
+    return BENCHMARK_IDLE_LOG;
+  }
+
+  return rounds
+    .map((round, index) => {
+      const order = round.order.join(' -> ');
+      return [
+        `Round ${index + 1} (${order})`,
+        `  incremental total=${formatDuration(round.incremental.totalMs)} avg=${formatDuration(round.incremental.totalMs / round.incremental.updateCount)} max=${formatDuration(round.incremental.maxMs)} updates=${round.incremental.updateCount}`,
+        `  naive       total=${formatDuration(round.naive.totalMs)} avg=${formatDuration(round.naive.totalMs / round.naive.updateCount)} max=${formatDuration(round.naive.maxMs)} updates=${round.naive.updateCount}`,
+      ].join('\n');
+    })
+    .join('\n\n');
+}
+
+function setBenchmarkRunningState(running, label = '运行性能对比') {
+  benchmarkRunning = running;
+  benchmarkButton.disabled = running;
+  benchmarkButton.textContent = label;
+}
+
+async function runBenchmarkComparison() {
+  if (benchmarkRunning) {
+    return;
+  }
+
+  stopPlayback();
+
+  const source = getSource();
+  const chunkSize = getChunkSize();
+  const runs = getBenchmarkRuns();
+  const chunks = splitIntoChunks(source, chunkSize);
+
+  syncBenchmarkConfigStats();
+
+  if (source.length === 0 || chunks.length === 0) {
+    resetBenchmarkResults('请先输入一段 Markdown 内容，再运行性能对比。');
+    return;
+  }
+
+  setBenchmarkRunningState(true, '预热中...');
+  benchmarkSummary.textContent = '准备 benchmark 环境并执行预热轮次...';
+  benchmarkLog.textContent = 'Warmup: incremental -> naive';
+
+  try {
+    const renderFullMarkdown = createNaiveFullRender();
+
+    await nextFrame();
+    measureIncrementalRun(chunks);
+    measureNaiveRun(chunks, renderFullMarkdown);
+    await nextFrame();
+
+    const rounds = [];
+
+    for (let roundIndex = 0; roundIndex < runs; roundIndex += 1) {
+      const order = roundIndex % 2 === 0
+        ? ['incremental', 'naive']
+        : ['naive', 'incremental'];
+      let incremental = null;
+      let naive = null;
+
+      setBenchmarkRunningState(true, `测试中 ${roundIndex + 1}/${runs}`);
+      benchmarkSummary.textContent = `正在执行第 ${roundIndex + 1} / ${runs} 轮性能对比...`;
+
+      for (const strategy of order) {
+        if (strategy === 'incremental') {
+          incremental = measureIncrementalRun(chunks);
+        } else {
+          naive = measureNaiveRun(chunks, renderFullMarkdown);
+        }
+      }
+
+      rounds.push({
+        order,
+        incremental,
+        naive,
+      });
+      benchmarkLog.textContent = formatBenchmarkLog(rounds);
+
+      if (roundIndex < runs - 1) {
+        await nextFrame();
+      }
+    }
+
+    const incremental = summarizeBenchmarkRuns(rounds.map((round) => round.incremental));
+    const naive = summarizeBenchmarkRuns(rounds.map((round) => round.naive));
+    const speedup = incremental.averageTotalMs > 0
+      ? naive.averageTotalMs / incremental.averageTotalMs
+      : 0;
+    const result = {
+      sourceLength: source.length,
+      chunkSize,
+      chunkCount: chunks.length,
+      runs,
+      incremental,
+      naive,
+      speedup,
+    };
+
+    benchmarkIncrementalValue.textContent = formatDuration(incremental.averageTotalMs);
+    benchmarkNaiveValue.textContent = formatDuration(naive.averageTotalMs);
+    benchmarkSpeedupValue.textContent = formatSpeedup(speedup);
+    benchmarkSummary.textContent = formatBenchmarkSummary(result);
+    benchmarkLog.textContent = formatBenchmarkLog(rounds);
+  } finally {
+    setBenchmarkRunningState(false);
+  }
 }
 
 function stopPlayback() {
@@ -409,7 +774,15 @@ playButton.addEventListener('click', () => {
 });
 
 finalizeButton.addEventListener('click', finalizeDemo);
-sourceInput.addEventListener('input', resetDemo);
+sourceInput.addEventListener('input', () => {
+  resetDemo();
+  invalidateBenchmarkResults();
+});
+chunkSizeInput.addEventListener('input', invalidateBenchmarkResults);
+benchmarkRunsInput.addEventListener('input', invalidateBenchmarkResults);
+benchmarkButton.addEventListener('click', () => {
+  void runBenchmarkComparison();
+});
 streamModeButton.addEventListener('click', () => {
   if (renderMode === 'stream') {
     return;
@@ -435,3 +808,4 @@ cursorVariantInput.addEventListener('input', resetDemo);
 
 updateModeUi();
 syncStatus();
+resetBenchmarkResults();
