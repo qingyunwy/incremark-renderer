@@ -2,3 +2,5 @@ node_modules
 .vscode
 .DS_Store
 demo/vendor/
+vitepress/.vitepress/cache/
+vitepress/.vitepress/dist/

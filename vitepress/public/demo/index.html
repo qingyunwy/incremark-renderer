@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>incremark-renderer Demo</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "incremark-renderer": "../dist/index.js",
+          "highlight.js": "./vendor/highlight.js",
+          "katex": "./vendor/katex.js",
+          "marked": "./vendor/marked.js",
+          "xss": "./vendor/xss.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <p class="eyebrow">Streaming Markdown Demo</p>
+        <h1>incremark-render 增量渲染验证页</h1>
+        <p class="lede">
+          页面会按 chunk 推进 Markdown 流输入，并显示稳定块数量、AST patch 日志、代码块高亮，以及 `:::` 自定义容器的渲染效果。
+        </p>
+      </section>
+
+      <section class="controls card">
+        <div class="mode-switch" role="tablist" aria-label="Render mode">
+          <button id="stream-mode-button" class="mode-button is-active" type="button" aria-pressed="true">
+            流式模式
+          </button>
+          <button id="full-mode-button" class="mode-button" type="button" aria-pressed="false">
+            全量模式
+          </button>
+        </div>
+
+        <label class="field">
+          <span>Markdown 样例</span>
+          <textarea id="source-input"></textarea>
+        </label>
+
+        <div class="toolbar">
+          <label class="field compact">
+            <span>每次 chunk 大小</span>
+            <input id="chunk-size" type="number" min="1" value="5" />
+          </label>
+          <label class="field compact">
+            <span>打字基础节奏（ms）</span>
+            <input id="play-interval" type="number" min="8" step="2" value="17" />
+          </label>
+          <label class="field compact">
+            <span>光标样式</span>
+            <select id="cursor-variant">
+              <option value="none">None 无光标</option>
+              <option value="bar">Bar 条形</option>
+              <option value="circle">Circle 小球</option>
+            </select>
+          </label>
+          <button id="reset-button" type="button">重置</button>
+          <button id="step-button" type="button">追加一段</button>
+          <button id="play-button" type="button">自动播放</button>
+          <button id="finalize-button" type="button">Finalize</button>
+        </div>
+
+        <div class="status-grid">
+          <article class="stat">
+            <span class="stat-label">已消费字符</span>
+            <strong id="consumed-value">0</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">稳定块数量</span>
+            <strong id="stable-value">0</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">当前 patch 数</span>
+            <strong id="patch-value">0</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">本次延迟</span>
+            <strong id="delay-value">0ms</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>流输入进度</h2>
+          <pre id="stream-preview" class="panel code"></pre>
+        </article>
+
+        <article class="card">
+          <h2>Patch 日志</h2>
+          <pre id="patch-log" class="panel code"></pre>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>块快照</h2>
+          <pre id="blocks-log" class="panel code"></pre>
+        </article>
+
+        <article class="card">
+          <h2>渲染结果</h2>
+          <div id="preview-root" class="panel preview"></div>
+        </article>
+      </section>
+
+      <section class="card benchmark">
+        <div class="benchmark-header">
+          <div>
+            <p class="eyebrow">Performance Benchmark</p>
+            <h2>流式性能对比</h2>
+            <p class="benchmark-lede">
+              使用当前 Markdown 输入与 chunk 配置，对比 incremark 的增量渲染路径，以及每次都重新全量解析并整体替换 DOM 的朴素方案。
+            </p>
+          </div>
+
+          <div class="toolbar benchmark-toolbar">
+            <label class="field compact">
+              <span>每组测试轮次</span>
+              <input id="benchmark-runs" type="number" min="1" max="30" value="12" />
+            </label>
+            <button id="benchmark-button" type="button">运行性能对比</button>
+          </div>
+        </div>
+
+        <div class="status-grid benchmark-status">
+          <article class="stat">
+            <span class="stat-label">文本长度</span>
+            <strong id="benchmark-chars-value">0</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">chunk 数量</span>
+            <strong id="benchmark-chunks-value">0</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">轮次</span>
+            <strong id="benchmark-runs-value">0</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">增量平均总耗时</span>
+            <strong id="benchmark-incremental-value">--</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">全量平均总耗时</span>
+            <strong id="benchmark-naive-value">--</strong>
+          </article>
+          <article class="stat">
+            <span class="stat-label">速度提升</span>
+            <strong id="benchmark-speedup-value">--</strong>
+          </article>
+        </div>
+
+        <div class="grid benchmark-grid">
+          <article class="benchmark-subcard">
+            <h3>结果摘要</h3>
+            <pre id="benchmark-summary" class="panel code"></pre>
+          </article>
+
+          <article class="benchmark-subcard">
+            <h3>原始轮次数据</h3>
+            <pre id="benchmark-log" class="panel code"></pre>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <div id="benchmark-sandbox" class="benchmark-sandbox" aria-hidden="true"></div>
+
+    <script type="module" src="./demo.js"></script>
+  </body>
+</html>

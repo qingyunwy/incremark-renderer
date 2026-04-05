@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="incremark-renderer">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c45b2d" />
+      <stop offset="100%" stop-color="#e3a146" />
+    </linearGradient>
+  </defs>
+  <rect x="12" y="12" width="104" height="104" rx="28" fill="#fff7ef" />
+  <path d="M38 34h30c15.464 0 28 12.536 28 28S83.464 90 68 90H38z" fill="url(#g)" />
+  <path d="M38 34h20v56H38z" fill="#7d3015" opacity=".92" />
+  <circle cx="82" cy="64" r="10" fill="#171717" />
+</svg>

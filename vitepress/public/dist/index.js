@@ -1,56 +1,3 @@
-"use strict";
-var __create = Object.create;
-var __defProp = Object.defineProperty;
-var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-var __getOwnPropNames = Object.getOwnPropertyNames;
-var __getProtoOf = Object.getPrototypeOf;
-var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
-};
-var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-  }
-  return to;
-};
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// src/index.ts
-var index_exports = {};
-__export(index_exports, {
-  DefaultBlockRenderer: () => DefaultBlockRenderer,
-  IncrementalDomRenderer: () => IncrementalDomRenderer,
-  MarkdownTypewriter: () => MarkdownTypewriter,
-  StreamMarkdownRenderer: () => StreamMarkdownRenderer,
-  StreamingMarkdownController: () => StreamingMarkdownController,
-  StreamingMarkdownTypewriter: () => StreamingMarkdownTypewriter,
-  TypewriterCursorController: () => TypewriterCursorController,
-  createContainerExtension: () => createContainerExtension,
-  createDefaultHtmlSanitizer: () => createDefaultHtmlSanitizer,
-  createHighlightExtension: () => createHighlightExtension,
-  createHtmlSanitizer: () => createHtmlSanitizer,
-  createMathExtension: () => createMathExtension,
-  diffAst: () => diffAst,
-  digestTokens: () => digestTokens,
-  extractStableBlocks: () => extractStableBlocks,
-  renderMarkdown: () => renderMarkdown,
-  renderMarkdownToString: () => renderMarkdownToString,
-  wrapBlockHtml: () => wrapBlockHtml
-});
-module.exports = __toCommonJS(index_exports);
-
 // src/extensions/container-syntax.ts
 var FENCE_PATTERN = /^ {0,3}(`{3,}|~{3,})(.*)$/u;
 var CONTAINER_PATTERN = /^ {0,3}(:{3,})([^\n]*)$/u;
@@ -511,8 +458,8 @@ function createContainerExtension(options = {}) {
 }
 
 // src/extensions/html-sanitizer.ts
-var import_xss = __toESM(require("xss"), 1);
-var xssRuntime = import_xss.default;
+import xss from "xss";
+var xssRuntime = xss;
 var {
   FilterXSS,
   friendlyAttrValue,
@@ -557,7 +504,6 @@ function escapeAttributeValue(value) {
 function cloneAllowList() {
   const allowList = getDefaultWhiteList();
   allowList.button = ["type", "disabled", "name", "value"];
-  allowList.input = ["type", "checked", "disabled"];
   allowList.aside = allowList.aside ?? [];
   allowList.article = allowList.article ?? [];
   allowList.section = allowList.section ?? [];
@@ -633,10 +579,10 @@ function wrapBlockHtml(block, innerHtml) {
 }
 
 // src/core/stream-markdown.ts
-var import_marked = require("marked");
+import { Marked } from "marked";
 
 // src/extensions/highlight.ts
-var import_highlight = __toESM(require("highlight.js"), 1);
+import hljs from "highlight.js";
 var TRAILING_NEWLINE_RE = /\n$/u;
 var INFO_LANGUAGE_RE = /^\S+/u;
 var HTML_ESCAPE_RE2 = /[&<>"']/g;
@@ -794,7 +740,7 @@ function renderCodeBlock(options) {
   return defaultHtml;
 }
 function getAutoDetectLanguages(options) {
-  const languages = options.languages?.map((language) => normalizeLanguage(language)).filter((language) => Boolean(language && import_highlight.default.getLanguage(language)));
+  const languages = options.languages?.map((language) => normalizeLanguage(language)).filter((language) => Boolean(language && hljs.getLanguage(language)));
   return languages?.length ? languages : void 0;
 }
 function createHighlightExtension(options = {}, runtime = {}) {
@@ -811,8 +757,8 @@ function createHighlightExtension(options = {}, runtime = {}) {
         const fallbackLanguage = declaredLanguage ? void 0 : normalizeLanguage(options.defaultLanguage);
         const configuredLanguage = declaredLanguage ?? fallbackLanguage;
         try {
-          if (highlightEnabled && configuredLanguage && import_highlight.default.getLanguage(configuredLanguage)) {
-            const result = import_highlight.default.highlight(renderedCode, {
+          if (highlightEnabled && configuredLanguage && hljs.getLanguage(configuredLanguage)) {
+            const result = hljs.highlight(renderedCode, {
               language: configuredLanguage,
               ignoreIllegals: true
             });
@@ -831,7 +777,7 @@ function createHighlightExtension(options = {}, runtime = {}) {
             });
           }
           if (highlightEnabled && options.autoDetect) {
-            const result = import_highlight.default.highlightAuto(renderedCode, getAutoDetectLanguages(options));
+            const result = hljs.highlightAuto(renderedCode, getAutoDetectLanguages(options));
             if (result.language) {
               return renderCodeBlock({
                 bodyHtml: result.value,
@@ -871,7 +817,7 @@ function createHighlightExtension(options = {}, runtime = {}) {
 }
 
 // src/extensions/math.ts
-var import_katex = __toESM(require("katex"), 1);
+import katex from "katex";
 var BLOCK_DOLLAR = "$$";
 var BLOCK_BRACKET_OPEN = "\\[";
 var BLOCK_BRACKET_CLOSE = "\\]";
@@ -910,7 +856,7 @@ function readDelimited(src, open, close, allowNewline) {
 }
 function renderMath(token, options) {
   try {
-    const markup = import_katex.default.renderToString(token.text, {
+    const markup = katex.renderToString(token.text, {
       ...options?.katex ?? {},
       displayMode: token.displayMode,
       output: options?.katex?.output ?? "mathml",
@@ -1041,7 +987,7 @@ var StreamMarkdownRenderer = class {
         highlightEnabled: options.highlight !== false
       })
     ];
-    this.marked = new import_marked.Marked(...extensions);
+    this.marked = new Marked(...extensions);
     if (options.marked) {
       this.marked.setOptions(options.marked);
     }
@@ -2029,8 +1975,7 @@ var StreamingMarkdownController = class {
     }
   }
 };
-// Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
+export {
   DefaultBlockRenderer,
   IncrementalDomRenderer,
   MarkdownTypewriter,
@@ -2049,4 +1994,4 @@ var StreamingMarkdownController = class {
   renderMarkdown,
   renderMarkdownToString,
   wrapBlockHtml
-});
+};

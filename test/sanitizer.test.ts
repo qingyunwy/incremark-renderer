@@ -25,3 +25,20 @@ test('renderMarkdownToString can disable HTML sanitization explicitly', () => {
 
   assert.match(html, /onerror="alert\(1\)"/);
 });
+
+test('renderMarkdownToString preserves task list checkboxes after sanitization', () => {
+  const html = renderMarkdownToString([
+    '- [x] Completed task',
+    '- [X] Also completed',
+    '- [ ] Pending task',
+    '  - [x] Nested completed task',
+    '  - [ ] Nested pending task',
+  ].join('\n'));
+
+  assert.match(html, /<input checked(?:="")? disabled(?:="")? type="checkbox"> Completed task/);
+  assert.match(html, /<input checked(?:="")? disabled(?:="")? type="checkbox"> Also completed/);
+  assert.match(html, /<input disabled(?:="")? type="checkbox"> Pending task/);
+  assert.match(html, /Nested completed task/);
+  assert.match(html, /Nested pending task/);
+  assert.doesNotMatch(html, /&lt;input/);
+});

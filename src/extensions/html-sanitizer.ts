@@ -58,6 +58,7 @@ function cloneAllowList(): IWhiteList {
   const allowList = getDefaultWhiteList();
 
   allowList.button = ['type', 'disabled', 'name', 'value'];
+  allowList.input = ['type', 'checked', 'disabled'];
   allowList.aside = allowList.aside ?? [];
   allowList.article = allowList.article ?? [];
   allowList.section = allowList.section ?? [];
