@@ -58,6 +58,12 @@ content
 \`\`\`
 :::
 
+:::thinking Streaming Thought
+step 1: inspect \`tail\` state and keep unfinished control lines mutable
+step 2: do not parse **markdown** or > quote syntax inside this container
+step 3: keep the fold state stable while the text is still streaming
+:::
+
 > 下面追加一个代码块，验证围栏闭合前不会过早稳定。
 
 \`\`\`ts
@@ -159,6 +165,11 @@ let typewriterFeedCursor = 0;
 let typewriterFeedTimer = null;
 let renderMode = 'stream';
 let benchmarkRunning = false;
+const THINKING_STATUS_LABELS = {
+  running: '正在思考',
+  completed: '思考完成',
+  aborted: '思考中止',
+};
 
 function escapeHtml(value) {
   return value
@@ -174,7 +185,40 @@ function sanitizeClassNameSegment(value) {
   return normalized.replace(/^-+|-+$/g, '') || 'default';
 }
 
-function renderDemoContainer({ type, title, innerHtml }) {
+function getThinkingFingerprint(type, title) {
+  return `${type}::${title ?? ''}`;
+}
+
+function getThinkingExpandedPreference(fingerprint) {
+  for (const node of previewRoot.querySelectorAll('[data-thinking-shell]')) {
+    if (!(node instanceof HTMLElement)) {
+      continue;
+    }
+
+    if (node.dataset.thinkingFingerprint === fingerprint) {
+      return node.dataset.thinkingExpanded !== 'false';
+    }
+  }
+
+  return true;
+}
+
+function renderThinkingContainer({ type, title, text, closed }) {
+  const safeType = escapeHtml(type);
+  const safeTitle = title ? escapeHtml(title) : '';
+  const fingerprint = getThinkingFingerprint(type, title);
+  const expanded = getThinkingExpandedPreference(fingerprint);
+  const statusLabel = closed ? THINKING_STATUS_LABELS.completed : THINKING_STATUS_LABELS.running;
+
+  return `<section class="demo-thinking" data-thinking-shell data-thinking-type="${safeType}" data-thinking-title="${safeTitle}" data-thinking-fingerprint="${escapeHtml(fingerprint)}" data-thinking-expanded="${String(expanded)}" data-thinking-closed="${String(closed)}"><button type="button" class="demo-thinking-toggle" data-thinking-toggle aria-expanded="${String(expanded)}"><span class="demo-thinking-toggle-copy"><span class="demo-thinking-chip">${safeType}</span>${title ? `<strong class="demo-thinking-title">${safeTitle}</strong>` : ''}</span><span class="demo-thinking-meta"><span class="demo-thinking-status" data-thinking-status-text>${statusLabel}</span><span class="demo-thinking-toggle-label" data-thinking-toggle-label>${expanded ? '折叠' : '展开'}</span><span class="demo-thinking-chevron" aria-hidden="true"></span></span></button><div class="demo-thinking-body" data-thinking-body><pre class="demo-thinking-text">${escapeHtml(text)}</pre></div></section>`;
+}
+
+function renderDemoContainer(context) {
+  if (context.type === 'thinking') {
+    return renderThinkingContainer(context);
+  }
+
+  const { type, title, innerHtml } = context;
   const safeType = escapeHtml(type);
   const safeTitle = title
     ? `<strong class="demo-callout-title">${escapeHtml(title)}</strong>`
@@ -198,6 +242,67 @@ function createDemoRendererOptions() {
   };
 }
 
+function getThinkingStatus(shell) {
+  const isClosed = shell.dataset.thinkingClosed === 'true';
+
+  if (isClosed) {
+    return 'completed';
+  }
+
+  if (renderMode === 'full') {
+    return 'aborted';
+  }
+
+  if (streamingController.isClosed() || cursor >= getSource().length) {
+    return 'aborted';
+  }
+
+  return 'running';
+}
+
+function setThinkingExpanded(shell, expanded) {
+  shell.dataset.thinkingExpanded = String(expanded);
+
+  const toggle = shell.querySelector('[data-thinking-toggle]');
+  if (toggle instanceof HTMLButtonElement) {
+    toggle.setAttribute('aria-expanded', String(expanded));
+  }
+
+  const toggleLabel = shell.querySelector('[data-thinking-toggle-label]');
+  if (toggleLabel instanceof HTMLElement) {
+    toggleLabel.textContent = expanded ? '折叠' : '展开';
+  }
+}
+
+function syncThinkingPanels() {
+  previewRoot.querySelectorAll('[data-thinking-shell]').forEach((node) => {
+    if (!(node instanceof HTMLElement)) {
+      return;
+    }
+
+    const status = getThinkingStatus(node);
+    node.dataset.thinkingStatus = status;
+
+    const statusText = node.querySelector('[data-thinking-status-text]');
+    if (statusText instanceof HTMLElement) {
+      statusText.textContent = THINKING_STATUS_LABELS[status];
+    }
+
+    const expanded = node.dataset.thinkingExpanded !== 'false';
+    setThinkingExpanded(node, expanded);
+  });
+}
+
+function toggleThinkingPanel(toggleButton) {
+  const shell = toggleButton.closest('[data-thinking-shell]');
+  if (!(shell instanceof HTMLElement)) {
+    return;
+  }
+
+  const nextExpanded = shell.dataset.thinkingExpanded !== 'true';
+  setThinkingExpanded(shell, nextExpanded);
+}
+
 function createStreamingController() {
   previewRoot.innerHTML = '';
   const controller = new StreamingMarkdownController(previewRoot, {
@@ -213,12 +318,13 @@ function createStreamingController() {
       lastDelayMs = meta.delayMs;
       syncStatus(meta.patches);
     },
-    onComplete: () => {
+    onComplete: (meta) => {
       if (typewriterFeedTimer !== null) {
         clearTimeout(typewriterFeedTimer);
         typewriterFeedTimer = null;
       }
       typewriterFeedCursor = cursor;
+      syncStatus(meta.patches);
       controller.cursorController?.hide();
       playButton.textContent = '自动播放';
     },
@@ -388,6 +494,7 @@ function syncStatus(patches = []) {
   streamPreview.textContent = getSource().slice(0, cursor);
   patchLog.textContent = describePatches(patches);
   blocksLog.textContent = describeBlocks();
+  syncThinkingPanels();
 }
 
 function syncBenchmarkConfigStats() {
@@ -754,27 +861,38 @@ function finalizeDemo() {
 
 previewRoot.addEventListener('click', async (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLButtonElement)) {
+  if (!(target instanceof HTMLElement)) {
     return;
   }
 
-  const encodedCode = target.dataset.copyCode;
+  const thinkingToggle = target.closest('[data-thinking-toggle]');
+  if (thinkingToggle instanceof HTMLButtonElement) {
+    toggleThinkingPanel(thinkingToggle);
+    return;
+  }
+
+  const copyButton = target.closest('[data-copy-code]');
+  if (!(copyButton instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const encodedCode = copyButton.dataset.copyCode;
   if (!encodedCode) {
     return;
   }
 
-  const previousLabel = target.textContent ?? 'Copy';
+  const previousLabel = copyButton.textContent ?? 'Copy';
 
   try {
     await navigator.clipboard.writeText(decodeURIComponent(encodedCode));
-    target.textContent = 'Copied';
+    copyButton.textContent = 'Copied';
   } catch {
-    target.textContent = 'Failed';
+    copyButton.textContent = 'Failed';
   }
 
   window.setTimeout(() => {
-    if (target.isConnected) {
-      target.textContent = previousLabel;
+    if (copyButton.isConnected) {
+      copyButton.textContent = previousLabel;
     }
   }, 1200);
 });

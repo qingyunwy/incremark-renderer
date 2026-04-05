@@ -541,6 +541,130 @@ button:hover {
   border-color: rgba(61, 143, 87, 0.22);
 }
 
+.preview .demo-thinking {
+  --thinking-accent: #c45b2d;
+  --thinking-soft: rgba(196, 91, 45, 0.12);
+  overflow: hidden;
+  border: 1px solid rgba(196, 91, 45, 0.2);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.68)),
+    var(--thinking-soft);
+  box-shadow: 0 14px 32px rgba(77, 53, 35, 0.08);
+}
+
+.preview .demo-thinking[data-thinking-status="completed"] {
+  --thinking-accent: #3d8f57;
+  --thinking-soft: rgba(61, 143, 87, 0.12);
+  border-color: rgba(61, 143, 87, 0.2);
+}
+
+.preview .demo-thinking[data-thinking-status="aborted"] {
+  --thinking-accent: #8b4a3f;
+  --thinking-soft: rgba(139, 74, 63, 0.12);
+  border-color: rgba(139, 74, 63, 0.2);
+}
+
+.preview .demo-thinking-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+  padding: 15px 18px;
+  border: 0;
+  border-bottom: 1px solid rgba(31, 36, 48, 0.08);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+}
+
+.preview .demo-thinking-toggle:hover {
+  transform: none;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.preview .demo-thinking-toggle-copy,
+.preview .demo-thinking-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.preview .demo-thinking-meta {
+  flex-shrink: 0;
+}
+
+.preview .demo-thinking-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.22rem 0.58rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--thinking-accent);
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.preview .demo-thinking-title {
+  min-width: 0;
+  font-size: 0.98rem;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.preview .demo-thinking-status,
+.preview .demo-thinking-toggle-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.preview .demo-thinking-status {
+  color: var(--thinking-accent);
+}
+
+.preview .demo-thinking-chevron {
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid rgba(31, 36, 48, 0.55);
+  border-bottom: 2px solid rgba(31, 36, 48, 0.55);
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+.preview .demo-thinking[data-thinking-expanded="false"] .demo-thinking-chevron {
+  transform: rotate(-45deg);
+}
+
+.preview .demo-thinking[data-thinking-expanded="false"] .demo-thinking-body {
+  display: none;
+}
+
+.preview .demo-thinking-body {
+  padding: 0 18px 18px;
+}
+
+.preview .demo-thinking-text {
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #28313a;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+
 .preview blockquote {
   margin: 0;
   padding-left: 16px;
