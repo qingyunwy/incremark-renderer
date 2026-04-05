@@ -100,6 +100,9 @@ function isContainerClose(line, size) {
 // src/core/block-boundary.ts
 var SINGLE_LINE_BLOCK_PATTERN = /^(#{1,6}\s+.+| {0,3}([-*_])(?:\s*\2){2,}\s*)$/;
 var SETEXT_UNDERLINE_PATTERN = /^ {0,3}(=+|-+)\s*$/;
+var INCOMPLETE_CONTAINER_PREFIX_RE = /^ {0,3}:{1,2}$/u;
+var CONTAINER_CONTROL_LINE_RE = /^ {0,3}:{3,}[^\n]*$/u;
+var INCOMPLETE_FENCE_PREFIX_RE = /^ {0,3}(`{1,2}|~{1,2})$/u;
 function getCompletedLines(input) {
   const lines = [];
   let start = 0;
@@ -139,6 +142,61 @@ function flushCurrentBlock(target, lines) {
   if (lines.length > 0) {
     target.push(lines.join(""));
   }
+}
+function scanLineLexicalContext(lines) {
+  let fenceState = null;
+  const containerStack = [];
+  for (const line of lines) {
+    if (fenceState) {
+      if (isFenceEnd(line, fenceState)) {
+        fenceState = null;
+      }
+      continue;
+    }
+    const fence = getFenceStart(line);
+    if (fence) {
+      fenceState = fence;
+      continue;
+    }
+    const nestedOpen = getContainerOpen(line);
+    if (nestedOpen) {
+      containerStack.push(nestedOpen.size);
+      continue;
+    }
+    const currentSize = containerStack[containerStack.length - 1];
+    if (currentSize && isContainerClose(line, currentSize)) {
+      containerStack.pop();
+    }
+  }
+  return {
+    fenceState,
+    containerStack
+  };
+}
+function isPotentialContainerControlLine(line) {
+  const trimmed = stripLineEnding(line);
+  return INCOMPLETE_CONTAINER_PREFIX_RE.test(trimmed) || CONTAINER_CONTROL_LINE_RE.test(trimmed);
+}
+function isPotentialFenceControlLine(line) {
+  const trimmed = stripLineEnding(line);
+  return INCOMPLETE_FENCE_PREFIX_RE.test(trimmed) || getFenceStart(trimmed) !== null;
+}
+function getRenderableTail(tail) {
+  if (tail.length === 0 || tail.endsWith("\n")) {
+    return tail;
+  }
+  const { lines, rest } = getCompletedLines(tail);
+  if (!rest) {
+    return tail;
+  }
+  const context = scanLineLexicalContext(lines);
+  if (context.fenceState) {
+    return isPotentialFenceControlLine(rest) ? lines.join("") : tail;
+  }
+  if (context.containerStack.length > 0) {
+    return isPotentialContainerControlLine(rest) || isPotentialFenceControlLine(rest) ? lines.join("") : tail;
+  }
+  return isPotentialContainerControlLine(rest) || isPotentialFenceControlLine(rest) ? lines.join("") : tail;
 }
 function extractStableBlocks(input, finalize = false) {
   const { lines, rest } = getCompletedLines(input);
@@ -1055,8 +1113,9 @@ var StreamMarkdownRenderer = class {
   }
   computeVisibleBlocks() {
     const blocks = cloneBlocks(this.stableBlocks);
-    if (this.tail.length > 0) {
-      blocks.push(this.createBlock(this.tail, false, "tail"));
+    const renderableTail = getRenderableTail(this.tail);
+    if (renderableTail.length > 0) {
+      blocks.push(this.createBlock(renderableTail, false, "tail"));
     }
     return blocks;
   }

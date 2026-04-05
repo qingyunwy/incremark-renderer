@@ -73,6 +73,121 @@ test('renderer keeps unfinished ::: container in tail until it closes', () => {
   assert.match(renderer.renderToString(), /<p>Hello<\/p>/);
 });
 
+test('renderer defers rendering an incomplete ::: opener line until the newline arrives', () => {
+  const renderer = new StreamMarkdownRenderer();
+
+  const first = renderer.append(':');
+  assert.equal(first.length, 0);
+  assert.equal(renderer.renderToString(), '');
+  assert.equal(renderer.getBlocks().length, 0);
+
+  const second = renderer.append(':');
+  assert.equal(second.length, 0);
+  assert.equal(renderer.renderToString(), '');
+  assert.equal(renderer.getBlocks().length, 0);
+
+  const third = renderer.append(':note Demo');
+  assert.equal(third.length, 0);
+  assert.equal(renderer.renderToString(), '');
+  assert.equal(renderer.getBlocks().length, 0);
+
+  const fourth = renderer.append('\nHello');
+  assert.equal(fourth.length, 1);
+  assert.equal(fourth[0]?.type, 'insert');
+  assert.match(renderer.renderToString(), /class="incremark-container incremark-container-note"/);
+  assert.match(renderer.renderToString(), /<div class="incremark-container-title">Demo<\/div>/);
+});
+
+test('renderer defers incomplete closing line prefixes inside a container', () => {
+  const renderer = new StreamMarkdownRenderer({
+    container: {
+      render: ({ closed, innerHtml }) => `<aside data-closed="${String(closed)}">${innerHtml}</aside>`,
+    },
+  });
+
+  renderer.append(':::note\nHello\n:');
+  assert.match(renderer.renderToString(), /data-closed="false"/);
+  assert.doesNotMatch(renderer.renderToString(), /Hello<\/p>\s*<p>:/);
+
+  renderer.append(':');
+  assert.match(renderer.renderToString(), /data-closed="false"/);
+  assert.doesNotMatch(renderer.renderToString(), /Hello<\/p>\s*<p>::/);
+
+  const patches = renderer.append(':\n');
+  assert.equal(patches.length, 1);
+  assert.match(renderer.renderToString(), /data-closed="true"/);
+});
+
+test('renderer still shows earlier tail content while deferring a trailing ::: line fragment', () => {
+  const renderer = new StreamMarkdownRenderer();
+
+  renderer.append('Hello\n:::');
+  assert.match(renderer.renderToString(), /<p>Hello<\/p>/);
+  assert.doesNotMatch(renderer.renderToString(), /:::/);
+});
+
+test('renderer does not defer ::: content inside an unfinished fenced code block', () => {
+  const renderer = new StreamMarkdownRenderer();
+
+  renderer.append('```md\n:::');
+  assert.match(renderer.renderToString(), /:::/);
+});
+
+test('renderer defers an incomplete fence opener line until the newline arrives', () => {
+  const renderer = new StreamMarkdownRenderer();
+
+  const first = renderer.append('`');
+  assert.equal(first.length, 0);
+  assert.equal(renderer.renderToString(), '');
+
+  const second = renderer.append('`');
+  assert.equal(second.length, 0);
+  assert.equal(renderer.renderToString(), '');
+
+  const third = renderer.append('`ts');
+  assert.equal(third.length, 0);
+  assert.equal(renderer.renderToString(), '');
+
+  const fourth = renderer.append('\nconst a = 1;');
+  assert.equal(fourth.length, 1);
+  assert.match(renderer.renderToString(), /class="incremark-code-block"/);
+});
+
+test('renderer defers an incomplete fence closing line while streaming a code block', () => {
+  const renderer = new StreamMarkdownRenderer({
+    highlight: {
+      renderBlock: ({ closed, bodyHtml }) =>
+        `<div class="code-shell" data-closed="${String(closed)}"><pre><code>${bodyHtml}</code></pre></div>`,
+    },
+  });
+
+  renderer.append('```ts\nconst a = 1;\n`');
+  assert.match(renderer.renderToString(), /data-closed="false"/);
+  assert.doesNotMatch(renderer.renderToString(), /const a = 1;\n`/);
+
+  renderer.append('`');
+  assert.match(renderer.renderToString(), /data-closed="false"/);
+  assert.doesNotMatch(renderer.renderToString(), /const a = 1;\n``/);
+
+  const patches = renderer.append('`\n');
+  assert.equal(patches.length, 1);
+  assert.match(renderer.renderToString(), /data-closed="true"/);
+});
+
+test('renderer waits for the closing ::: line to finish before marking the container closed', () => {
+  const renderer = new StreamMarkdownRenderer({
+    container: {
+      render: ({ closed, innerHtml }) => `<aside data-closed="${String(closed)}">${innerHtml}</aside>`,
+    },
+  });
+
+  renderer.append(':::note\nHello\n:::');
+  assert.match(renderer.renderToString(), /data-closed="false"/);
+
+  renderer.append('\n');
+  assert.match(renderer.renderToString(), /data-closed="true"/);
+});
+
 test('renderer updates closed flag for ::: containers while streaming', () => {
   const renderer = new StreamMarkdownRenderer({
     container: {

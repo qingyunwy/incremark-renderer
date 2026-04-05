@@ -11,6 +11,9 @@ import {
 const SINGLE_LINE_BLOCK_PATTERN =
   /^(#{1,6}\s+.+| {0,3}([-*_])(?:\s*\2){2,}\s*)$/;
 const SETEXT_UNDERLINE_PATTERN = /^ {0,3}(=+|-+)\s*$/;
+const INCOMPLETE_CONTAINER_PREFIX_RE = /^ {0,3}:{1,2}$/u;
+const CONTAINER_CONTROL_LINE_RE = /^ {0,3}:{3,}[^\n]*$/u;
+const INCOMPLETE_FENCE_PREFIX_RE = /^ {0,3}(`{1,2}|~{1,2})$/u;
 
 // Streaming input often ends mid-line. We only treat complete lines as candidates
 // for stabilization and leave the last unterminated fragment in `rest`.
@@ -63,6 +66,81 @@ function flushCurrentBlock(target: string[], lines: string[]): void {
   if (lines.length > 0) {
     target.push(lines.join(''));
   }
+}
+
+function scanLineLexicalContext(lines: string[]): {
+  fenceState: FenceState | null;
+  containerStack: number[];
+} {
+  let fenceState: FenceState | null = null;
+  const containerStack: number[] = [];
+
+  for (const line of lines) {
+    if (fenceState) {
+      if (isFenceEnd(line, fenceState)) {
+        fenceState = null;
+      }
+      continue;
+    }
+
+    const fence = getFenceStart(line);
+    if (fence) {
+      fenceState = fence;
+      continue;
+    }
+
+    const nestedOpen = getContainerOpen(line);
+    if (nestedOpen) {
+      containerStack.push(nestedOpen.size);
+      continue;
+    }
+
+    const currentSize = containerStack[containerStack.length - 1];
+    if (currentSize && isContainerClose(line, currentSize)) {
+      containerStack.pop();
+    }
+  }
+
+  return {
+    fenceState,
+    containerStack,
+  };
+}
+
+function isPotentialContainerControlLine(line: string): boolean {
+  const trimmed = stripLineEnding(line);
+  return INCOMPLETE_CONTAINER_PREFIX_RE.test(trimmed) || CONTAINER_CONTROL_LINE_RE.test(trimmed);
+}
+
+function isPotentialFenceControlLine(line: string): boolean {
+  const trimmed = stripLineEnding(line);
+  return INCOMPLETE_FENCE_PREFIX_RE.test(trimmed) || getFenceStart(trimmed) !== null;
+}
+
+export function getRenderableTail(tail: string): string {
+  if (tail.length === 0 || tail.endsWith('\n')) {
+    return tail;
+  }
+
+  const { lines, rest } = getCompletedLines(tail);
+  if (!rest) {
+    return tail;
+  }
+
+  const context = scanLineLexicalContext(lines);
+  if (context.fenceState) {
+    return isPotentialFenceControlLine(rest) ? lines.join('') : tail;
+  }
+
+  if (context.containerStack.length > 0) {
+    return (isPotentialContainerControlLine(rest) || isPotentialFenceControlLine(rest))
+      ? lines.join('')
+      : tail;
+  }
+
+  return (isPotentialContainerControlLine(rest) || isPotentialFenceControlLine(rest))
+    ? lines.join('')
+    : tail;
 }
 
 // This detector mirrors incremark's core idea: only advance the stable prefix

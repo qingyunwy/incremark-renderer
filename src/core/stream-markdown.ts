@@ -1,7 +1,7 @@
 import { Marked } from 'marked';
 
 import { diffAst, digestTokens } from './ast-diff.js';
-import { extractStableBlocks } from './block-boundary.js';
+import { extractStableBlocks, getRenderableTail } from './block-boundary.js';
 import { createContainerExtension } from '../extensions/container.js';
 import { createHighlightExtension } from '../extensions/highlight.js';
 import { createHtmlSanitizer } from '../extensions/html-sanitizer.js';
@@ -142,8 +142,9 @@ export class StreamMarkdownRenderer {
     const blocks = cloneBlocks(this.stableBlocks);
     // The tail is exposed as a synthetic block so UI layers can still render the
     // in-progress fragment while knowing it may be replaced on the next chunk.
-    if (this.tail.length > 0) {
-      blocks.push(this.createBlock(this.tail, false, 'tail'));
+    const renderableTail = getRenderableTail(this.tail);
+    if (renderableTail.length > 0) {
+      blocks.push(this.createBlock(renderableTail, false, 'tail'));
     }
     return blocks;
   }
