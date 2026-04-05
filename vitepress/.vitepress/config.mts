@@ -30,7 +30,6 @@ export default defineConfig({
         text: '参考',
         items: [
           { text: 'API 选型', link: '/reference/api-selection' },
-          { text: 'GitHub Pages 部署', link: '/reference/github-pages' },
         ],
       },
       {
