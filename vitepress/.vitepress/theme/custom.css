@@ -3,6 +3,15 @@
   --vp-c-brand-2: #d77934;
   --vp-c-brand-3: #a94d26;
   --vp-c-brand-soft: rgba(196, 91, 45, 0.16);
+  --home-feature-border: rgba(31, 36, 48, 0.08);
+  --home-feature-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.7)),
+    radial-gradient(circle at top right, rgba(196, 91, 45, 0.08), transparent 38%);
+  --home-feature-shadow: 0 18px 42px rgba(77, 53, 35, 0.08);
+  --home-doc-card-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 244, 239, 0.92)),
+    radial-gradient(circle at top right, rgba(196, 91, 45, 0.08), transparent 40%);
+  --home-doc-card-shadow: 0 18px 48px rgba(77, 53, 35, 0.08);
   --vp-home-hero-name-color: transparent;
   --vp-home-hero-name-background: linear-gradient(120deg, #9b3f1f 0%, #c45b2d 38%, #e3a146 100%);
   --vp-home-hero-image-background-image:
@@ -11,15 +20,26 @@
   --vp-home-hero-image-filter: blur(72px);
 }
 
+.dark {
+  --home-feature-border: rgba(148, 163, 184, 0.16);
+  --home-feature-bg:
+    linear-gradient(180deg, rgba(27, 34, 46, 0.9), rgba(18, 24, 34, 0.84)),
+    radial-gradient(circle at top right, rgba(196, 91, 45, 0.18), transparent 44%);
+  --home-feature-shadow: 0 20px 48px rgba(0, 0, 0, 0.24);
+  --home-doc-card-bg:
+    linear-gradient(180deg, rgba(26, 33, 46, 0.92), rgba(16, 22, 32, 0.9)),
+    radial-gradient(circle at top right, rgba(196, 91, 45, 0.18), transparent 46%);
+  --home-doc-card-shadow: 0 20px 52px rgba(0, 0, 0, 0.26);
+}
+
 .VPHomeHero .text {
   max-width: 10em;
 }
 
 .VPFeature {
-  border: 1px solid rgba(31, 36, 48, 0.08);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.7)),
-    radial-gradient(circle at top right, rgba(196, 91, 45, 0.08), transparent 38%);
+  border: 1px solid var(--home-feature-border);
+  background: var(--home-feature-bg);
+  box-shadow: var(--home-feature-shadow);
   backdrop-filter: blur(12px);
 }
 
@@ -40,10 +60,8 @@
   padding: 20px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 20px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 244, 239, 0.92)),
-    radial-gradient(circle at top right, rgba(196, 91, 45, 0.08), transparent 40%);
-  box-shadow: 0 18px 48px rgba(77, 53, 35, 0.08);
+  background: var(--home-doc-card-bg);
+  box-shadow: var(--home-doc-card-shadow);
 }
 
 .vp-doc .doc-card h3 {

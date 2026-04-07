@@ -2,80 +2,109 @@
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import { StreamingMarkdownController } from '../../../../dist/index.js';
 
-const DEFAULT_MARKDOWN = `# Incremark Renderer
+const DEFAULT_MARKDOWN = `# Incremark Renderer Streaming Showcase
 
-这是一个用于验证增量 Markdown 渲染效果的 demo。
+这段默认输入模拟的是一个“聊天答复 / 插件面板 / 实时内容卡片”的流式 Markdown 输出。
+
+你可以直接点击开始播放，观察标题、段落、列表、容器、代码块、公式、表格如何按 stable blocks 增量渲染。
+
+访问文档时可以继续参考 [快速开始](/guide/getting-started) 和 [浏览器集成](/guide/browser-integration)。
+
+## 覆盖的测试样例
+
+- 标题、段落、强调、行内代码与链接
+- 有序列表、无序列表、引用块
+- \`:::\` 容器与 \`thinking\` 折叠面板
+- fenced code block、代码头部按钮、行号
+- 行内公式、块级公式、表格
+
+## 典型接入场景
+
+1. 聊天界面里的 AI 回答逐字播放
+2. 插件面板里的结构化 Markdown 卡片
+3. 报告、日志、分析结果的增量更新
+
+> 目标不是“每个 chunk 全量重刷”，而是在内容持续到达时，只重算新增稳定块和当前 mutable tail。
+
+:::note 插件面板设定
+这个 demo 默认模拟一个插件输出面板：
+
+- 上半区输入 Markdown
+- 下半区展示增量渲染结果
+- 代码块带复制按钮与行号
+
+你可以把容器类型改成 \`tip\`、\`warning\` 或 \`success\`，快速验证不同 callout 样式。
+:::
+
+:::tip Render Hooks
+演示页当前启用了几类常见扩展点：
+
+- \`container.render\` 自定义 callout / thinking 外层结构
+- \`highlight.renderHeader\` 注入 Copy 按钮
+- \`showLineNumbers\` 为 fenced code block 添加 gutter
+:::
+
+:::warning 流式边界测试
+下面这个代码块里的 \`:::\` 只是普通文本，不应该被误判成容器结束标记：
+
+\`\`\`md
+:::note Draft Panel
+streaming body
+:::
+\`\`\`
+:::
+
+:::thinking Token Stream Trace
+step 1: receive delta text from model or plugin
+step 2: keep unfinished container and fence lines inside mutable tail
+step 3: once closing markers arrive, stabilize the block and patch only the changed DOM
+:::
+
+## 代码块与行号
 
 \`\`\`ts
-function renderLineNumberGutter(code: string): { html: string; lineCount: number } {
-  const lineCount = splitDisplayLines(code).length;
-  const rows: string[] = [];
+export function renderPluginMessage(root: HTMLElement, markdown: string) {
+  const controller = new StreamingMarkdownController(root, {
+    cursor: { variant: 'circle' },
+    typewriter: { baseDelayMs: 14, minChunkSize: 1, maxChunkSize: 3 },
+  });
 
-  for (let index = 0; index < lineCount; index += 1) {
-    const lineNumber = index + 1;
-    rows.push(
-      \`<span class="incremark-code-line-number" data-line-number="\${lineNumber}" aria-hidden="true">\${lineNumber}</span>\`,
-    );
-  }
-
-  return {
-    html: rows.join(''),
-    lineCount,
-  };
+  controller.push(markdown);
+  controller.close();
 }
 \`\`\`
+
+## 列表、引用与行内语法
+
+- **粗体** 用来强调关键能力
+- *斜体* 可以表示状态或阶段
+- \`inline code\` 适合标识 API、字段和配置项
+- 链接可以指向 [GitHub](https://github.com/qingyunwy/incremark-renderer)
+
+1. 先识别 stable blocks
+2. 再重绘 mutable tail
+3. 最后仅对变化块执行 patch
+
+> 如果围栏代码块或容器还没闭合，渲染器会保留它们的“进行中”状态，而不是过早稳定。
+
+## 数学公式
 
 行内公式示例：$E = mc^2$，以及 \\(a^2 + b^2 = c^2\\)。
 
-## Feature Checklist
-
-- 只对新增稳定块做 marked lexer
-- 当前尾块允许持续重解析
-- DOM 仅替换变更块
-
-## Custom Containers
-
-:::note Demo Callout
-这个区域在 demo 页面里通过 \`container.render\` 自定义成了 callout 结构。
-
-你可以把类型改成 \`tip\`、\`warning\` 或 \`success\`，看看预览区域的样式变化。
-:::
-
-:::warning 流式稳定性
-- \`:::\` 没闭合之前会一直留在 tail
-- 闭合后才会稳定成独立块
-
-\`\`\`md
-:::tip Nested sample
-content
-:::
-\`\`\`
-:::
-
-:::thinking Streaming Thought
-step 1: inspect \`tail\` state and keep unfinished control lines mutable
-step 2: do not parse **markdown** or > quote syntax inside this container
-step 3: keep the fold state stable while the text is still streaming
-:::
-
-> 下面追加一个代码块，验证围栏闭合前不会过早稳定。
-
-\`\`\`ts
-export function sum(a: number, b: number) {
-  return a + b;
-}
-\`\`\`
-
-最后再补一个表格：
+块级公式：
 
 $$
 \\int_0^1 x^2 \\, dx = \\frac{1}{3}
 $$
 
-| stage | behavior |
-| --- | --- |
-| lexer | incremental |
-| render | partial patch |
+## 表格
+
+| 场景 | 输入特征 | 预期行为 |
+| --- | --- | --- |
+| 普通段落 | 文本持续追加 | replace 当前 tail |
+| 容器块 | \`:::\` 尚未闭合 | 保持 open 状态 |
+| 代码块 | 围栏未结束 | 不提前稳定 |
+| 已完成块 | 结构闭合完成 | insert stable block |
 `;
 
 type ThinkingStatus = 'running' | 'completed' | 'aborted';
@@ -409,14 +438,75 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .stream-showcase {
+  --stream-shell-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(246, 241, 235, 0.94)),
+    radial-gradient(circle at top right, rgba(196, 91, 45, 0.12), transparent 36%);
+  --stream-shell-shadow: 0 26px 60px rgba(77, 53, 35, 0.12);
+  --stream-panel-border: rgba(31, 36, 48, 0.08);
+  --stream-panel-bg: rgba(255, 255, 255, 0.74);
+  --stream-surface-border: rgba(31, 36, 48, 0.08);
+  --stream-surface-bg: rgba(255, 252, 248, 0.94);
+  --stream-control-border: rgba(31, 36, 48, 0.12);
+  --stream-control-bg: rgba(255, 255, 255, 0.9);
+  --stream-action-border: rgba(31, 36, 48, 0.1);
+  --stream-action-bg: rgba(255, 255, 255, 0.9);
+  --stream-callout-bg:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.52)),
+    var(--callout-soft);
+  --stream-callout-shadow: 0 14px 32px rgba(77, 53, 35, 0.08);
+  --stream-callout-chip-bg: rgba(255, 255, 255, 0.72);
+  --stream-callout-edge-fade: rgba(255, 255, 255, 0.82);
+  --stream-thinking-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.68)),
+    var(--thinking-soft);
+  --stream-thinking-shadow: 0 14px 32px rgba(77, 53, 35, 0.08);
+  --stream-thinking-toggle-border: rgba(31, 36, 48, 0.08);
+  --stream-thinking-toggle-hover: rgba(255, 255, 255, 0.28);
+  --stream-thinking-chip-bg: rgba(255, 255, 255, 0.74);
+  --stream-thinking-chevron: rgba(31, 36, 48, 0.55);
+  --stream-thinking-text: #28313a;
+  --stream-quote-border: rgba(196, 91, 45, 0.35);
+  --stream-table-border: rgba(31, 36, 48, 0.12);
+  color-scheme: light;
   margin: 24px 0 36px;
   padding: 24px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 28px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(246, 241, 235, 0.94)),
-    radial-gradient(circle at top right, rgba(196, 91, 45, 0.12), transparent 36%);
-  box-shadow: 0 26px 60px rgba(77, 53, 35, 0.12);
+  background: var(--stream-shell-bg);
+  box-shadow: var(--stream-shell-shadow);
+}
+
+:global(html.dark .stream-showcase) {
+  --stream-shell-bg:
+    linear-gradient(180deg, rgba(25, 31, 42, 0.96), rgba(15, 20, 29, 0.96)),
+    radial-gradient(circle at top right, rgba(196, 91, 45, 0.18), transparent 42%);
+  --stream-shell-shadow: 0 28px 72px rgba(0, 0, 0, 0.34);
+  --stream-panel-border: rgba(148, 163, 184, 0.16);
+  --stream-panel-bg: rgba(20, 26, 36, 0.82);
+  --stream-surface-border: rgba(148, 163, 184, 0.16);
+  --stream-surface-bg: rgba(10, 15, 24, 0.9);
+  --stream-control-border: rgba(148, 163, 184, 0.2);
+  --stream-control-bg: rgba(32, 40, 53, 0.9);
+  --stream-action-border: rgba(148, 163, 184, 0.18);
+  --stream-action-bg: rgba(32, 40, 53, 0.92);
+  --stream-callout-bg:
+    linear-gradient(135deg, rgba(31, 39, 53, 0.88), rgba(17, 24, 35, 0.82)),
+    var(--callout-soft);
+  --stream-callout-shadow: 0 16px 38px rgba(0, 0, 0, 0.26);
+  --stream-callout-chip-bg: rgba(255, 255, 255, 0.08);
+  --stream-callout-edge-fade: rgba(255, 255, 255, 0.22);
+  --stream-thinking-bg:
+    linear-gradient(180deg, rgba(30, 38, 52, 0.88), rgba(18, 25, 36, 0.84)),
+    var(--thinking-soft);
+  --stream-thinking-shadow: 0 16px 38px rgba(0, 0, 0, 0.28);
+  --stream-thinking-toggle-border: rgba(148, 163, 184, 0.14);
+  --stream-thinking-toggle-hover: rgba(255, 255, 255, 0.05);
+  --stream-thinking-chip-bg: rgba(255, 255, 255, 0.08);
+  --stream-thinking-chevron: rgba(226, 232, 240, 0.72);
+  --stream-thinking-text: rgba(241, 245, 249, 0.92);
+  --stream-quote-border: rgba(215, 121, 52, 0.48);
+  --stream-table-border: rgba(148, 163, 184, 0.18);
+  color-scheme: dark;
 }
 
 .stream-showcase__header {
@@ -452,9 +542,9 @@ onBeforeUnmount(() => {
   gap: 10px;
   margin-top: 18px;
   padding: 18px;
-  border: 1px solid rgba(31, 36, 48, 0.08);
+  border: 1px solid var(--stream-panel-border);
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.74);
+  background: var(--stream-panel-bg);
 }
 
 .stream-showcase__panel-title,
@@ -467,9 +557,9 @@ onBeforeUnmount(() => {
 .stream-showcase__textarea,
 .stream-showcase__preview {
   min-height: 520px;
-  border: 1px solid rgba(31, 36, 48, 0.08);
+  border: 1px solid var(--stream-surface-border);
   border-radius: 18px;
-  background: rgba(255, 252, 248, 0.94);
+  background: var(--stream-surface-bg);
 }
 
 .stream-showcase__textarea {
@@ -477,6 +567,7 @@ onBeforeUnmount(() => {
   padding: 16px;
   resize: vertical;
   color: var(--vp-c-text-1);
+  caret-color: var(--vp-c-brand-1);
   font: inherit;
   line-height: 1.6;
   font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
@@ -500,9 +591,9 @@ onBeforeUnmount(() => {
 .stream-showcase__select {
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid rgba(31, 36, 48, 0.12);
+  border: 1px solid var(--stream-control-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--stream-control-bg);
   color: var(--vp-c-text-1);
   font: inherit;
 }
@@ -510,9 +601,9 @@ onBeforeUnmount(() => {
 .stream-showcase__action {
   min-width: 120px;
   padding: 12px 18px;
-  border: 1px solid rgba(31, 36, 48, 0.1);
+  border: 1px solid var(--stream-action-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--stream-action-bg);
   color: var(--vp-c-text-1);
   font: inherit;
   font-weight: 700;
@@ -713,10 +804,8 @@ onBeforeUnmount(() => {
   padding: 16px 18px;
   border: 1px solid rgba(34, 125, 112, 0.18);
   border-radius: 20px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.52)),
-    var(--callout-soft);
-  box-shadow: 0 14px 32px rgba(77, 53, 35, 0.08);
+  background: var(--stream-callout-bg);
+  box-shadow: var(--stream-callout-shadow);
 }
 
 .stream-showcase__preview :deep(.demo-callout::before) {
@@ -724,7 +813,7 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0 auto 0 0;
   width: 5px;
-  background: linear-gradient(180deg, var(--callout-accent) 0%, rgba(255, 255, 255, 0.82) 100%);
+  background: linear-gradient(180deg, var(--callout-accent) 0%, var(--stream-callout-edge-fade) 100%);
 }
 
 .stream-showcase__preview :deep(.demo-callout-head) {
@@ -740,7 +829,7 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: 0.2rem 0.58rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--stream-callout-chip-bg);
   color: var(--callout-accent);
   font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
   font-size: 0.72rem;
@@ -790,10 +879,8 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border: 1px solid rgba(196, 91, 45, 0.2);
   border-radius: 20px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.68)),
-    var(--thinking-soft);
-  box-shadow: 0 14px 32px rgba(77, 53, 35, 0.08);
+  background: var(--stream-thinking-bg);
+  box-shadow: var(--stream-thinking-shadow);
 }
 
 .stream-showcase__preview :deep(.demo-thinking[data-thinking-status="completed"]) {
@@ -817,7 +904,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   padding: 15px 18px;
   border: 0;
-  border-bottom: 1px solid rgba(31, 36, 48, 0.08);
+  border-bottom: 1px solid var(--stream-thinking-toggle-border);
   border-radius: 0;
   background: transparent;
   color: inherit;
@@ -826,7 +913,7 @@ onBeforeUnmount(() => {
 
 .stream-showcase__preview :deep(.demo-thinking-toggle:hover) {
   transform: none;
-  background: rgba(255, 255, 255, 0.28);
+  background: var(--stream-thinking-toggle-hover);
 }
 
 .stream-showcase__preview :deep(.demo-thinking-toggle-copy),
@@ -846,7 +933,7 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: 0.22rem 0.58rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.74);
+  background: var(--stream-thinking-chip-bg);
   color: var(--thinking-accent);
   font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
   font-size: 0.72rem;
@@ -877,8 +964,8 @@ onBeforeUnmount(() => {
 .stream-showcase__preview :deep(.demo-thinking-chevron) {
   width: 10px;
   height: 10px;
-  border-right: 2px solid rgba(31, 36, 48, 0.55);
-  border-bottom: 2px solid rgba(31, 36, 48, 0.55);
+  border-right: 2px solid var(--stream-thinking-chevron);
+  border-bottom: 2px solid var(--stream-thinking-chevron);
   transform: rotate(45deg);
   transition: transform 160ms ease;
 }
@@ -900,7 +987,7 @@ onBeforeUnmount(() => {
   padding: 0;
   border-radius: 0;
   background: transparent;
-  color: #28313a;
+  color: var(--stream-thinking-text);
   white-space: pre-wrap;
   word-break: break-word;
   font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
@@ -911,7 +998,7 @@ onBeforeUnmount(() => {
 .stream-showcase__preview :deep(blockquote) {
   margin: 0;
   padding-left: 16px;
-  border-left: 4px solid rgba(196, 91, 45, 0.35);
+  border-left: 4px solid var(--stream-quote-border);
   color: var(--vp-c-text-2);
 }
 
@@ -961,7 +1048,7 @@ onBeforeUnmount(() => {
 .stream-showcase__preview :deep(th),
 .stream-showcase__preview :deep(td) {
   padding: 8px 10px;
-  border: 1px solid rgba(31, 36, 48, 0.12);
+  border: 1px solid var(--stream-table-border);
 }
 
 @keyframes stream-showcase-cursor-blink {

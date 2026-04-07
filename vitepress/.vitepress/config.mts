@@ -12,7 +12,7 @@ export default defineConfig({
     siteTitle: 'incremark-renderer',
     logo: '/logo.svg',
     nav: [
-      { text: '说明书', link: '/guide/getting-started' },
+      { text: '指南', link: '/guide/getting-started' },
       { text: '演示', link: '/demo' },
       { text: 'API 选型', link: '/reference/api-selection' },
       { text: 'GitHub', link: 'https://github.com/qingyunwy/incremark-renderer' },

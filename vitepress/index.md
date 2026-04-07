@@ -3,7 +3,7 @@ layout: home
 
 hero:
   name: incremark-renderer
-  text: 流式 Markdown 增量渲染说明书
+  text: 流式 Markdown 增量渲染器
   tagline: 面向聊天界面、LLM 产品和实时内容场景，按稳定块增量解析并局部更新 DOM。
   actions:
     - theme: brand
