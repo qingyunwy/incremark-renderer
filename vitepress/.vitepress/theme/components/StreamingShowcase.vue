@@ -120,9 +120,11 @@ const source = ref(DEFAULT_MARKDOWN);
 const previewRoot = ref<HTMLElement | null>(null);
 const controller = shallowRef<StreamingMarkdownController | null>(null);
 const playbackState = ref<'idle' | 'running' | 'completed'>('idle');
-const cursorVariant = ref<CursorVariantSetting>('circle');
-const baseDelayMs = ref(14);
-const maxChunkSize = ref(3);
+// Keep the in-doc demo aligned with /demo defaults so docs pages avoid the
+// extra caret measurement/repaint cost on lower-end mobile devices.
+const cursorVariant = ref<CursorVariantSetting>('none');
+const baseDelayMs = ref(17);
+const maxChunkSize = ref(5);
 
 function escapeHtml(value: string): string {
   return value
@@ -619,6 +621,8 @@ onBeforeUnmount(() => {
 .stream-showcase__preview {
   position: relative;
   overflow: auto;
+  contain: paint;
+  isolation: isolate;
   padding: 18px 20px;
   line-height: 1.7;
 }
