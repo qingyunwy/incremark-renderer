@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI 解题结构解析 Demo</title>
+    <link rel="stylesheet" href="/demo/style.css" />
+    <link rel="stylesheet" href="/demo/ai-solve.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "incremark-renderer": "/dist/index.js",
+          "highlight.js": "/demo/vendor/highlight.js",
+          "katex": "/demo/vendor/katex.js",
+          "marked": "/demo/vendor/marked.js",
+          "xss": "/demo/vendor/xss.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="page ai-solve-page">
+      <section class="hero">
+        <p class="eyebrow">AI Solve Parser</p>
+        <h1>AI 解题结构化解析演示</h1>
+        <p class="lede">
+          针对 <code>### T1:</code>、<code>### 识别题目：</code>、<code>### 答案:</code>、
+          <code>### 解析过程:</code> 这类大模型输出格式，新增一个专用扩展解析，并在右侧生成题号切换式的解题结果界面。
+        </p>
+      </section>
+
+      <section class="ai-solve-layout">
+        <article class="card ai-solve-editor">
+          <div class="ai-solve-editor__head">
+            <div>
+              <h2>模型输出 Markdown</h2>
+              <p class="ai-solve-note">
+                这里可以直接粘贴模型原始输出，右侧会按题目自动分组。
+              </p>
+            </div>
+            <div class="ai-solve-toolbar">
+              <label class="field compact">
+                <span>每次 chunk 大小</span>
+                <input id="chunk-size" type="number" min="1" value="36" />
+              </label>
+              <label class="field compact">
+                <span>播放间隔（ms）</span>
+                <input id="play-interval" type="number" min="8" step="2" value="22" />
+              </label>
+            </div>
+          </div>
+
+          <label class="field ai-solve-editor__field">
+            <span>输入内容</span>
+            <textarea id="source-input" class="ai-solve-editor__textarea"></textarea>
+          </label>
+
+          <div class="toolbar ai-solve-actions">
+            <button id="render-button" type="button">立即渲染</button>
+            <button id="play-button" type="button">流式播放</button>
+            <button id="reset-button" type="button">恢复样例</button>
+          </div>
+        </article>
+
+        <article class="card ai-solve-device-shell">
+          <div class="ai-solve-device">
+            <div class="ai-solve-device__status">
+              <p id="summary-text" class="ai-solve-device__summary">暂未识别到题目</p>
+              <div id="question-nav" class="ai-solve-device__nav" role="tablist" aria-label="题目切换"></div>
+            </div>
+
+            <div class="ai-solve-device__viewport">
+              <div id="preview-root" class="ai-solve-preview"></div>
+              <div id="empty-state" class="ai-solve-empty">
+                <strong>等待结构化结果</strong>
+                <p>当输入中出现 <code>### T1:</code> 这类题目标记后，这里会自动切换成题号分页视图。</p>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="/demo/ai-solve.js"></script>
+  </body>
+  </html>
